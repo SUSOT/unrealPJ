@@ -7,35 +7,14 @@ public class UnrealTeamPJ : ModuleRules
 	public UnrealTeamPJ(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+	
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
 
-		PublicDependencyModuleNames.AddRange(new string[] {
-			"Core",
-			"CoreUObject",
-			"Engine",
-			"InputCore",
-			"EnhancedInput",
-			"AIModule",
-			"StateTreeModule",
-			"GameplayStateTreeModule",
-			"UMG",
-			"Slate"
-		});
-
-		PrivateDependencyModuleNames.AddRange(new string[] { });
-
-		PublicIncludePaths.AddRange(new string[] {
-			"UnrealTeamPJ",
-			"UnrealTeamPJ/Variant_Horror",
-			"UnrealTeamPJ/Variant_Horror/UI",
-			"UnrealTeamPJ/Variant_Shooter",
-			"UnrealTeamPJ/Variant_Shooter/AI",
-			"UnrealTeamPJ/Variant_Shooter/UI",
-			"UnrealTeamPJ/Variant_Shooter/Weapons"
-		});
+		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
-
+		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
 

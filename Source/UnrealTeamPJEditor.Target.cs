@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 public class UnrealTeamPJEditorTarget : TargetRules
 {
-	public UnrealTeamPJEditorTarget(TargetInfo Target) : base(Target)
+	public UnrealTeamPJEditorTarget( TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
