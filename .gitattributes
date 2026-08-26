@@ -1,1 +1,4 @@
 Content/Showcase/** filter=lfs diff=lfs merge=lfs -text
+Content/Developers/LCM/Levels/TestLevel.umap filter=lfs diff=lfs merge=lfs -text
+Content/PN_GrassLibrary/Textures/LandscapeTextures/ground_III_albedo.uasset filter=lfs diff=lfs merge=lfs -text
+Content/PN_GrassLibrary/Textures/grassTextures/MasterTextures/springGrass_Albedo_8k_I.uasset filter=lfs diff=lfs merge=lfs -text
