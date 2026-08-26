@@ -4,6 +4,9 @@
 #include "Character/UTPCharacter.h"
 #include "Camera/CameraComponent.h"
 
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+
 // Sets default values
 AUTPCharacter::AUTPCharacter()
 {
@@ -22,7 +25,7 @@ AUTPCharacter::AUTPCharacter()
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(GetRootComponent());
-	Camera->SetRelativeLocation(FVector(30.0f, 0.0f, 83.0f));
+	Camera->SetRelativeLocation(FVector(28.8f, 0.0f, 83.0f));
 	Camera->SetRelativeRotation(FRotator(180.0f, 180.0f, 180.0f));
 }
 
@@ -40,10 +43,40 @@ void AUTPCharacter::Tick(float DeltaTime)
 
 }
 
+void AUTPCharacter::NotifyControllerChanged()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController)
+	{
+		auto* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer());
+
+		if (Subsystem)
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+	}
+}
+
 // Called to bind functionality to input
 void AUTPCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	auto* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent);
+	if (EnhancedInputComponent)
+	{
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUTPCharacter::Input_Move);
+
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this,&AUTPCharacter::Input_Look);
+	}
+
+}
+
+void AUTPCharacter::Input_Move(const FInputActionValue& InputValue)
+{
+}
+
+void AUTPCharacter::Input_Look(const FInputActionValue& InputValue)
+{
 }
 
