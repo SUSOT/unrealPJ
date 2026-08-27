@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Components/CameraNoiseComponent.h"
 #include "UTPCharacter.generated.h"
 
 struct FInputActionValue;
@@ -31,13 +32,21 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
+	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	//TObjectPtr<class USpringArmComponent> SpringArm;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<class UCameraComponent> Camera;
 
+	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	//TObjectPtr<class UCameraNoiseComponent> CameraNoiseComp;
 
 public:
 	void Input_Move(const FInputActionValue& InputValue);
 	void Input_Look(const FInputActionValue& InputValue);
+	void Sprint();
+	void StopSprint();
+
 protected:
 	UPROPERTY(EditAnywhere, Category = Input)
 	TObjectPtr<class UInputMappingContext> DefaultMappingContext;
@@ -45,4 +54,17 @@ protected:
 	TObjectPtr<class UInputAction> MoveAction;
 	UPROPERTY(EditAnywhere, Category = Input)
 	TObjectPtr<class UInputAction> LookAction;
+	UPROPERTY(EditAnywhere, Category = Input)
+	TObjectPtr<class UInputAction> SprintAction;
+
+
+protected:
+	UPROPERTY(EditAnywhere, Category = Move)
+	float WalkSpeed = 300.0f;
+
+	UPROPERTY(EditAnywhere, Category = Move)
+	float SprintSpeed = 600.0f;
+
+
+
 };
