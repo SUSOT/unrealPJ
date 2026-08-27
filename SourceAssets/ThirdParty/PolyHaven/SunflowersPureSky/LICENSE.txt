@@ -1,0 +1,8 @@
+Asset: Sunflowers (Pure Sky)
+Authors: Sergej Majboroda (original), Jarod Guest (sky edits)
+Source: https://polyhaven.com/a/sunflowers_puresky
+License: Creative Commons CC0 1.0 Universal (Public Domain Dedication)
+License page: https://polyhaven.com/license
+
+Downloaded resolution/format: 2K Radiance HDR
+Downloaded for use as the TestLevel skybox in UnrealTeamPJ.
