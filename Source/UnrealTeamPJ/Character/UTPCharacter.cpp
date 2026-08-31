@@ -9,6 +9,10 @@
 #include "EnhancedInputSubsystems.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Camera/CameraShakeBase.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
+
 // Sets default values
 AUTPCharacter::AUTPCharacter()
 {
@@ -30,20 +34,17 @@ AUTPCharacter::AUTPCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 
-	//SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
-	//SpringArm->SetupAttachment(GetRootComponent());
-	//SpringArm->SetRelativeLocation(FVector(20.0f, 0.0f, 83.0f));
-	//SpringArm->TargetArmLength = 0.0f;
-	//SpringArm->bUsePawnControlRotation = true;
-	//SpringArm->bEnableCameraRotationLag = false;
-	//SpringArm->bEnableCameraLag = false;
-	//SpringArm->CameraLagSpeed = 15.0f;
+	// 3인칭용 스프링 암은 1인칭 시점을 망치므로 다시 비활성화(주석 처리)합니다.
+	// SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
+	// SpringArm->SetupAttachment(GetMesh(), FName("head"));
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(GetMesh(), FName("head"));
-	Camera->SetRelativeLocation(FVector(18.0f, 17.0f, 0.0f));
+	
+	// Y값을 0으로 맞춰서 카메라를 정중앙으로 맞추고, Z값을 확 내려서 코가 안 보이게 합니다. (X: 상하, Y: 앞, Z: 좌우)
+	Camera->SetRelativeLocation(FVector(15.0f, 21.0f, 0.0f)); 
 	Camera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-	Camera->bUsePawnControlRotation = true; // 컨트롤러 회전 사용 (마우스 상하좌우)
+	Camera->bUsePawnControlRotation = true; // 평소엔 컨트롤러 회전 따름
 
 	// CameraCollider = CreateDefaultSubobject<USphereComponent>(TEXT("CameraCollider"));
 	// CameraCollider->SetupAttachment(Camera);
@@ -69,7 +70,16 @@ void AUTPCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// 떨어지는 중일 때 가장 높은 Z값을 갱신 (점프 등으로 더 높아질 수 있으므로)
+	if (GetCharacterMovement()->IsFalling())
+	{
+		if (GetActorLocation().Z > FallStartZ)
+		{
+			FallStartZ = GetActorLocation().Z;
+		}
+	}
 }
+
 
 void AUTPCharacter::NotifyControllerChanged()
 {
@@ -136,4 +146,112 @@ void AUTPCharacter::Sprint()
 void AUTPCharacter::StopSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+}
+
+void AUTPCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
+{
+	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+
+	// 떨어지기 시작할 때 현재 높이를 기록하고 레그돌(Ragdoll) 활성화 타이머 설정
+	if (GetCharacterMovement()->MovementMode == MOVE_Falling)
+	{
+		FallStartZ = GetActorLocation().Z;
+
+		// 다시 공중에 떴으므로 회복 타이머 취소 (허공에서 일어나는 것 방지)
+		GetWorldTimerManager().ClearTimer(RecoverRagdollTimerHandle);
+
+		// 0.25초 후 레그돌 활성화 (짧은 점프나 낙하에서는 레그돌 방지)
+		GetWorldTimerManager().SetTimer(FallRagdollTimerHandle, this, &AUTPCharacter::StartRagdoll, 0.25f, false);
+	}
+	// 떨어지는 상태가 끝났을 때(착지, 수영 등) 원래 상태로 복구
+	else if (PrevMovementMode == MOVE_Falling)
+	{
+		// 0.25초 이내에 착지했다면 레그돌 타이머 취소
+		GetWorldTimerManager().ClearTimer(FallRagdollTimerHandle);
+
+		if (bIsRagdolled)
+		{
+			// 레그돌 상태였다면 3초 후 회복하도록 타이머 설정
+			GetWorldTimerManager().SetTimer(RecoverRagdollTimerHandle, this, &AUTPCharacter::RecoverFromRagdoll, 3.0f, false);
+		}
+	}
+}
+
+void AUTPCharacter::StartRagdoll()
+{
+	// 여전히 떨어지는 중인지 확인
+	if (!GetCharacterMovement()->IsFalling()) return;
+
+	// 이미 레그돌 상태라면 무시 (물리 엔진 초기화로 인해 끊기는 현상 방지)
+	if (bIsRagdolled) return;
+
+	bIsRagdolled = true;
+
+	// 메쉬가 바닥을 뚫고 지나가는 것을 방지 (Continuous Collision Detection)
+	GetMesh()->SetAllUseCCD(true);
+
+	// 몸에 힘이 빠지도록 레그돌 즉시 활성화
+	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+	GetMesh()->SetSimulatePhysics(true);
+	
+	// 레그돌 중에는 카메라가 마우스 회전을 무시하고 머리가 구르는 대로 360도 같이 뒹굴게 함
+	if (Camera)
+	{
+		Camera->bUsePawnControlRotation = false;
+	}
+}
+
+void AUTPCharacter::RecoverFromRagdoll()
+{
+	// 메쉬가 아직도 빠르게 움직이고 있다면 (비탈길을 구르거나 허공을 떨어지는 중) 회복을 연기함
+	// 주의: GetPhysicsLinearVelocity()에 본 이름을 명시하지 않으면 루트(캡슐)의 속도를 가져와 0이 될 수 있습니다.
+	if (GetMesh()->GetPhysicsLinearVelocity(TEXT("pelvis")).Size() > 50.0f)
+	{
+		// 1초 뒤에 다시 일어날 수 있는지 확인
+		GetWorldTimerManager().SetTimer(RecoverRagdollTimerHandle, this, &AUTPCharacter::RecoverFromRagdoll, 1.0f, false);
+		return;
+	}
+
+	bIsRagdolled = false;
+
+	// 레그돌 메쉬의 현재 위치(골반 부근)를 가져옴
+	FVector PelvisLocation = GetMesh()->GetSocketLocation(TEXT("pelvis"));
+
+	// 레그돌 비활성화 전 캡슐(액터)을 메쉬가 굴러간 위치로 이동시킴
+	// 바닥을 찾아서 캡슐이 땅에 정확히 서도록 설정
+	FHitResult HitResult;
+	FVector StartTrace = PelvisLocation + FVector(0.0f, 0.0f, 50.0f); // 펠비스에서 조금 위부터 시작
+	FVector EndTrace = PelvisLocation - FVector(0.0f, 0.0f, 500.0f);  // 아래로 레이캐스트
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartTrace, EndTrace, ECC_Visibility, QueryParams))
+	{
+		FVector NewLocation = HitResult.Location + FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 2.0f);
+		SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	else
+	{
+		SetActorLocation(PelvisLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	// 레그돌 비활성화 및 원래 위치로 복구
+	GetMesh()->SetAllUseCCD(false);
+	GetMesh()->SetSimulatePhysics(false);
+	GetMesh()->SetCollisionProfileName(TEXT("CharacterMesh"));
+	
+	if (Camera)
+	{
+		Camera->bUsePawnControlRotation = true;
+		
+		// 틱(Tick) 등에서 임의로 변경된 카메라 위치/회전값이 있다면 1인칭 기본 위치로 완전히 초기화
+		Camera->SetRelativeLocation(FVector(15.0f, 21.0f, 0.0f));
+		Camera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+	}
+	
+	// 캡슐 컴포넌트에 다시 어태치(Attach)하고 기본 트랜스폼으로 초기화
+	GetMesh()->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
+	GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 }

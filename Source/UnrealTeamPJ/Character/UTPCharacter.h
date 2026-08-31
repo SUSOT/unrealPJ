@@ -32,14 +32,41 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
-	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	//TObjectPtr<class USpringArmComponent> SpringArm;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<class USpringArmComponent> SpringArm;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<class UCameraComponent> Camera;
 
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	//TObjectPtr<class UCameraNoiseComponent> CameraNoiseComp;
+
+protected:
+	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode) override;
+
+	// 공중에 떨어지는 동안 재생할 카메라 흔들림 클래스 (블루프린트에서 설정, Looping 추천)
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	TSubclassOf<class UCameraShakeBase> FallCameraShakeClass;
+
+	// 카메라 흔들림이 발생하기 시작하는 최소 낙하 높이
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MinFallHeightForShake = 500.0f; 
+
+private:
+	// 낙하 시작(또는 최고점) 높이 기록용
+	float FallStartZ;
+	
+	// 현재 재생 중인 낙하 카메라 쉐이크 추적용
+	UPROPERTY()
+	class UCameraShakeBase* ActiveFallShake;
+
+protected:
+	FTimerHandle FallRagdollTimerHandle;
+	FTimerHandle RecoverRagdollTimerHandle;
+	bool bIsRagdolled = false;
+
+	void StartRagdoll();
+	void RecoverFromRagdoll();
 
 public:
 	void Input_Move(const FInputActionValue& InputValue);
