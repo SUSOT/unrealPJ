@@ -11,10 +11,11 @@
 
 namespace InfiniteMap
 {
-	// Roughly doubles the previous one-metre grid density.  The large, but
-	// cell-bounded, jitter breaks visible rows without allowing broad clumps.
-	constexpr float GrassSpacing = 71.0f;
-	constexpr float GrassJitter = 31.0f;
+	// A dense but performance-conscious grid.  Larger clumps preserve the full
+	// lawn look while cutting the serialized and rendered instance count by
+	// roughly forty percent compared with the previous 71 cm grid.
+	constexpr float GrassSpacing = 95.0f;
+	constexpr float GrassJitter = 42.0f;
 	constexpr float RoadExclusionHalfWidth = 500.0f;
 	constexpr float MinimumGrassHeight = -500.0f;
 	constexpr float MinimumSurfaceNormalZ = 0.72f;
@@ -68,9 +69,14 @@ AInfiniteMapInstances::AInfiniteMapInstances()
 	{
 		GrassComponent->SetMobility(EComponentMobility::Static);
 		GrassComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		GrassComponent->SetGenerateOverlapEvents(false);
+		GrassComponent->SetCanEverAffectNavigation(false);
 		GrassComponent->SetCastShadow(false);
-		GrassComponent->InstanceStartCullDistance = 8000;
-		GrassComponent->InstanceEndCullDistance = 15000;
+		GrassComponent->SetVisibleInRayTracing(false);
+		GrassComponent->SetAffectDistanceFieldLighting(false);
+		GrassComponent->SetWorldPositionOffsetDisableDistance(7000);
+		GrassComponent->bEnableDensityScaling = true;
+		GrassComponent->SetCullDistances(6500, 11000);
 	}
 
 	ExtendedRoad->SetMobility(EComponentMobility::Static);
@@ -176,9 +182,9 @@ void AInfiniteMapInstances::PopulateGrass(ALandscapeProxy* Landscape)
 
 	UHierarchicalInstancedStaticMeshComponent* GrassComponents[] = {Grass01, Grass02, Grass03};
 	const FVector2D ScaleRanges[] = {
-		FVector2D(1.05f, 1.25f),
-		FVector2D(1.10f, 1.32f),
-		FVector2D(1.20f, 1.45f)};
+		FVector2D(1.12f, 1.34f),
+		FVector2D(1.18f, 1.42f),
+		FVector2D(1.28f, 1.52f)};
 
 	for (int32 Row = 0; Row < Rows; ++Row)
 	{

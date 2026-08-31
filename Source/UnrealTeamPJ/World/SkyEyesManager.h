@@ -48,7 +48,7 @@ private:
 	void CreateEyes();
 	void DestroyEyes();
 	void InitializeFromCamera(const FVector& CameraForward, float HorizontalFOV);
-	void ApplyEyeVisual(FSkyEyeRuntimeState& Eye, const FVector& CameraRight);
+	void ApplyEyeVisual(FSkyEyeRuntimeState& Eye);
 	bool ShouldEyeClose(const FVector& CameraForward, float HorizontalFOV, const FVector& EyeDirection) const;
 
 protected:

@@ -11,6 +11,7 @@ ASkyEyesManager::ASkyEyesManager()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
+	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	bReplicates = false;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
@@ -47,7 +48,6 @@ void ASkyEyesManager::Tick(float DeltaSeconds)
 	const FVector CameraLocation = CameraManager->GetCameraLocation();
 	const FRotator CameraRotation = CameraManager->GetCameraRotation();
 	const FVector CameraForward = CameraRotation.Vector().GetSafeNormal();
-	const FVector CameraRight = FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Y);
 	const float HorizontalFOV = CameraManager->GetFOVAngle();
 
 	SetActorLocation(CameraLocation, false, nullptr, ETeleportType::TeleportPhysics);
@@ -76,7 +76,7 @@ void ASkyEyesManager::Tick(float DeltaSeconds)
 		const float AnimationDuration = TargetBlink > Eye.BlinkAmount ? CloseDuration : OpenDuration;
 		const float AnimationRate = 1.0f / FMath::Max(AnimationDuration, KINDA_SMALL_NUMBER);
 		Eye.BlinkAmount = FMath::FInterpConstantTo(Eye.BlinkAmount, TargetBlink, DeltaSeconds, AnimationRate);
-		ApplyEyeVisual(Eye, CameraRight);
+		ApplyEyeVisual(Eye);
 	}
 }
 
@@ -119,9 +119,17 @@ void ASkyEyesManager::CreateEyes()
 		EyeComponent->SetGenerateOverlapEvents(false);
 		EyeComponent->SetCastShadow(false);
 		EyeComponent->SetCanEverAffectNavigation(false);
+		EyeComponent->SetVisibleInRayTracing(false);
+		EyeComponent->SetAffectDistanceFieldLighting(false);
 		EyeComponent->SetReceivesDecals(false);
 		EyeComponent->SetTranslucentSortPriority(-10);
 		EyeComponent->SetRelativeLocation(Direction * SphereRadius);
+		// The plane always faces the manager origin (the camera position), while
+		// local Y stays aligned to world up.  This avoids the 90/180-degree roll
+		// flip caused by rebuilding the billboard from the rotating camera-right
+		// vector every frame.
+		EyeComponent->SetRelativeRotation(
+			FRotationMatrix::MakeFromZY(-Direction, FVector::UpVector).Rotator());
 		EyeComponent->SetVisibility(false);
 		AddInstanceComponent(EyeComponent);
 		EyeComponent->RegisterComponent();
@@ -160,7 +168,7 @@ void ASkyEyesManager::InitializeFromCamera(const FVector& CameraForward, float H
 	}
 }
 
-void ASkyEyesManager::ApplyEyeVisual(FSkyEyeRuntimeState& Eye, const FVector& CameraRight)
+void ASkyEyesManager::ApplyEyeVisual(FSkyEyeRuntimeState& Eye)
 {
 	if (!Eye.Component)
 	{
@@ -175,9 +183,6 @@ void ASkyEyesManager::ApplyEyeVisual(FSkyEyeRuntimeState& Eye, const FVector& Ca
 		return;
 	}
 
-	const FVector ToCamera = -Eye.Direction;
-	const FRotator FacingRotation = FRotationMatrix::MakeFromZX(ToCamera, CameraRight).Rotator();
-	Eye.Component->SetWorldRotation(FacingRotation);
 	Eye.Component->SetRelativeScale3D(FVector(
 		Eye.WidthScale,
 		FMath::Max(Eye.OpenHeightScale * Openness, 0.001f),
