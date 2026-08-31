@@ -40,7 +40,7 @@ AUTPCharacter::AUTPCharacter()
 	//SpringArm->CameraLagSpeed = 15.0f;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale,FName("head"));
+	Camera->SetupAttachment(GetMesh(), FName("head"));
 	Camera->SetRelativeLocation(FVector(18.0f, 17.0f, 0.0f));
 	Camera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
 	Camera->bUsePawnControlRotation = true; // 컨트롤러 회전 사용 (마우스 상하좌우)

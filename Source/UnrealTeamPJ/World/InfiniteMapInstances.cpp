@@ -1,5 +1,6 @@
 #include "World/InfiniteMapInstances.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
@@ -10,12 +11,19 @@
 
 namespace InfiniteMap
 {
-	constexpr float GrassSpacing = 100.0f;
-	constexpr float GrassJitter = 28.0f;
+	// Roughly doubles the previous one-metre grid density.  The large, but
+	// cell-bounded, jitter breaks visible rows without allowing broad clumps.
+	constexpr float GrassSpacing = 71.0f;
+	constexpr float GrassJitter = 31.0f;
 	constexpr float RoadExclusionHalfWidth = 500.0f;
 	constexpr float MinimumGrassHeight = -500.0f;
 	constexpr float MinimumSurfaceNormalZ = 0.72f;
 	constexpr float RoadSegmentHalfLength = 1000.0f;
+	// Keep a broad band of landscape outside the playable area so the terrain
+	// edge stays below the player's horizon even when standing at the barrier.
+	constexpr float BoundaryInset = 15000.0f;
+	constexpr float BoundaryHalfThickness = 100.0f;
+	constexpr float BoundaryHalfHeight = 50000.0f;
 }
 
 AInfiniteMapInstances::AInfiniteMapInstances()
@@ -30,11 +38,19 @@ AInfiniteMapInstances::AInfiniteMapInstances()
 	Grass02 = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("Grass02"));
 	Grass03 = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("Grass03"));
 	ExtendedRoad = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("ExtendedRoad"));
+	BoundaryNorth = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundaryNorth"));
+	BoundarySouth = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundarySouth"));
+	BoundaryEast = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundaryEast"));
+	BoundaryWest = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundaryWest"));
 
 	Grass01->SetupAttachment(SceneRoot);
 	Grass02->SetupAttachment(SceneRoot);
 	Grass03->SetupAttachment(SceneRoot);
 	ExtendedRoad->SetupAttachment(SceneRoot);
+	BoundaryNorth->SetupAttachment(SceneRoot);
+	BoundarySouth->SetupAttachment(SceneRoot);
+	BoundaryEast->SetupAttachment(SceneRoot);
+	BoundaryWest->SetupAttachment(SceneRoot);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Grass01Asset(TEXT("/Game/PN_GrassLibrary/Meshes/grassMesh/grass_01_01_mesh.grass_01_01_mesh"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Grass02Asset(TEXT("/Game/PN_GrassLibrary/Meshes/grassMesh/grass_01_05_mesh.grass_01_05_mesh"));
@@ -60,6 +76,17 @@ AInfiniteMapInstances::AInfiniteMapInstances()
 	ExtendedRoad->SetMobility(EComponentMobility::Static);
 	ExtendedRoad->SetCollisionProfileName(TEXT("BlockAll"));
 	ExtendedRoad->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
+	for (UBoxComponent* Boundary : {BoundaryNorth.Get(), BoundarySouth.Get(), BoundaryEast.Get(), BoundaryWest.Get()})
+	{
+		Boundary->SetMobility(EComponentMobility::Static);
+		Boundary->SetCollisionProfileName(TEXT("BlockAll"));
+		Boundary->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Boundary->SetGenerateOverlapEvents(false);
+		Boundary->SetCanEverAffectNavigation(false);
+		Boundary->CanCharacterStepUpOn = ECB_No;
+		Boundary->SetHiddenInGame(true);
+	}
 }
 
 void AInfiniteMapInstances::OnConstruction(const FTransform& Transform)
@@ -81,7 +108,8 @@ void AInfiniteMapInstances::PostInitializeComponents()
 
 void AInfiniteMapInstances::RebuildInstances()
 {
-	if (!Grass01 || !Grass02 || !Grass03 || !ExtendedRoad)
+	if (!Grass01 || !Grass02 || !Grass03 || !ExtendedRoad ||
+		!BoundaryNorth || !BoundarySouth || !BoundaryEast || !BoundaryWest)
 	{
 		return;
 	}
@@ -109,6 +137,27 @@ void AInfiniteMapInstances::RebuildInstances()
 	Landscape->GetActorBounds(false, LandscapeOrigin, LandscapeExtent);
 	PopulateGrass(Landscape);
 	PopulateRoad(LandscapeOrigin.Y - LandscapeExtent.Y, LandscapeOrigin.Y + LandscapeExtent.Y);
+	ConfigureBoundaryWalls(LandscapeOrigin, LandscapeExtent);
+}
+
+void AInfiniteMapInstances::ConfigureBoundaryWalls(const FVector& LandscapeOrigin, const FVector& LandscapeExtent)
+{
+	const float AllowedHalfX = FMath::Max(1000.0f, LandscapeExtent.X - InfiniteMap::BoundaryInset);
+	const float AllowedHalfY = FMath::Max(1000.0f, LandscapeExtent.Y - InfiniteMap::BoundaryInset);
+	const float NorthY = LandscapeOrigin.Y + AllowedHalfY;
+	const float SouthY = LandscapeOrigin.Y - AllowedHalfY;
+	const float EastX = LandscapeOrigin.X + AllowedHalfX;
+	const float WestX = LandscapeOrigin.X - AllowedHalfX;
+
+	BoundaryNorth->SetRelativeLocation(FVector(LandscapeOrigin.X, NorthY, 0.0f));
+	BoundarySouth->SetRelativeLocation(FVector(LandscapeOrigin.X, SouthY, 0.0f));
+	BoundaryEast->SetRelativeLocation(FVector(EastX, LandscapeOrigin.Y, 0.0f));
+	BoundaryWest->SetRelativeLocation(FVector(WestX, LandscapeOrigin.Y, 0.0f));
+
+	BoundaryNorth->SetBoxExtent(FVector(AllowedHalfX + InfiniteMap::BoundaryHalfThickness, InfiniteMap::BoundaryHalfThickness, InfiniteMap::BoundaryHalfHeight));
+	BoundarySouth->SetBoxExtent(FVector(AllowedHalfX + InfiniteMap::BoundaryHalfThickness, InfiniteMap::BoundaryHalfThickness, InfiniteMap::BoundaryHalfHeight));
+	BoundaryEast->SetBoxExtent(FVector(InfiniteMap::BoundaryHalfThickness, AllowedHalfY + InfiniteMap::BoundaryHalfThickness, InfiniteMap::BoundaryHalfHeight));
+	BoundaryWest->SetBoxExtent(FVector(InfiniteMap::BoundaryHalfThickness, AllowedHalfY + InfiniteMap::BoundaryHalfThickness, InfiniteMap::BoundaryHalfHeight));
 }
 
 void AInfiniteMapInstances::PopulateGrass(ALandscapeProxy* Landscape)
