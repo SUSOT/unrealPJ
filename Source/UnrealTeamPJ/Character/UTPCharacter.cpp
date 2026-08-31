@@ -39,7 +39,7 @@ AUTPCharacter::AUTPCharacter()
 	// SpringArm->SetupAttachment(GetMesh(), FName("head"));
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, FName("head"));
+	Camera->SetupAttachment(GetMesh(), FName("head"));
 	
 	// Y값을 0으로 맞춰서 카메라를 정중앙으로 맞추고, Z값을 확 내려서 코가 안 보이게 합니다. (X: 상하, Y: 앞, Z: 좌우)
 	Camera->SetRelativeLocation(FVector(15.0f, 21.0f, 0.0f)); 
