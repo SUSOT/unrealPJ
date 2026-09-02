@@ -83,7 +83,16 @@ protected:
 	TObjectPtr<class UInputAction> LookAction;
 	UPROPERTY(EditAnywhere, Category = Input)
 	TObjectPtr<class UInputAction> SprintAction;
+	UPROPERTY(EditAnywhere, Category = Input)
+	TObjectPtr<class UInputAction> JumpAction;
 
+	// 레그돌이 발동되는 최소 낙하 거리 (점프 높이보다 높게 설정해야 일반 점프 시 레그돌 방지)
+	UPROPERTY(EditAnywhere, Category = "Ragdoll")
+	float RagdollTriggerHeight = 200.0f;
+
+	// 일어날 때 재생할 몽타주
+	UPROPERTY(EditAnywhere, Category = "Animation")
+	class UAnimMontage* GetUpMontage;
 
 protected:
 	UPROPERTY(EditAnywhere, Category = Move)
