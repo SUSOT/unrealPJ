@@ -77,6 +77,13 @@ void AUTPCharacter::Tick(float DeltaTime)
 		{
 			FallStartZ = GetActorLocation().Z;
 		}
+
+		// 점프/낙하 최고점에서 지정된 높이(RagdollTriggerHeight) 이상 떨어졌을 때만 레그돌 발동
+		// 일반적인 점프 높이보다 크기 때문에 점프 시에는 작동하지 않고 깊은 낙하 시에만 작동합니다.
+		if (!bIsRagdolled && (FallStartZ - GetActorLocation().Z) > RagdollTriggerHeight)
+		{
+			StartRagdoll();
+		}
 	}
 }
 
@@ -109,6 +116,12 @@ void AUTPCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AUTPCharacter::Sprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AUTPCharacter::StopSprint);
+		
+		if (JumpAction)
+		{
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		}
 	}
 	
 }
@@ -152,23 +165,17 @@ void AUTPCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 
 {
 	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
 
-	// 떨어지기 시작할 때 현재 높이를 기록하고 레그돌(Ragdoll) 활성화 타이머 설정
+	// 떨어지기 시작할 때 현재 높이를 기록
 	if (GetCharacterMovement()->MovementMode == MOVE_Falling)
 	{
 		FallStartZ = GetActorLocation().Z;
 
 		// 다시 공중에 떴으므로 회복 타이머 취소 (허공에서 일어나는 것 방지)
 		GetWorldTimerManager().ClearTimer(RecoverRagdollTimerHandle);
-
-		// 0.25초 후 레그돌 활성화 (짧은 점프나 낙하에서는 레그돌 방지)
-		GetWorldTimerManager().SetTimer(FallRagdollTimerHandle, this, &AUTPCharacter::StartRagdoll, 0.25f, false);
 	}
 	// 떨어지는 상태가 끝났을 때(착지, 수영 등) 원래 상태로 복구
 	else if (PrevMovementMode == MOVE_Falling)
 	{
-		// 0.25초 이내에 착지했다면 레그돌 타이머 취소
-		GetWorldTimerManager().ClearTimer(FallRagdollTimerHandle);
-
 		if (bIsRagdolled)
 		{
 			// 레그돌 상태였다면 3초 후 회복하도록 타이머 설정
@@ -193,6 +200,24 @@ void AUTPCharacter::StartRagdoll()
 	// 몸에 힘이 빠지도록 레그돌 즉시 활성화
 	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
 	GetMesh()->SetSimulatePhysics(true);
+	
+	// 캐릭터의 현재 이동 속도를 가져와 물리 엔진에 덮어씌움 (관성을 유지)
+	FVector CurrentVelocity = GetVelocity();
+	GetMesh()->SetPhysicsLinearVelocity(CurrentVelocity);
+	
+	// 이동 방향 구하기 (제자리 낙하라면 바라보는 방향)
+	FVector VelocityDir = CurrentVelocity.GetSafeNormal2D();
+	if (VelocityDir.IsNearlyZero())
+	{
+		VelocityDir = GetActorForwardVector();
+	}
+
+	// 위쪽(Z) 벡터와 이동 방향 벡터를 외적(Cross Product)하여 회전 축(오른쪽 방향)을 구함
+	FVector SpinAxis = FVector::CrossProduct(FVector::UpVector, VelocityDir);
+	
+	// 진행 방향으로 머리가 아래로 쏠리며 빙글빙글(somersault) 고꾸라지도록 강력한 회전력(Angular Impulse) 추가
+	// bVelChange가 true이므로 라디안/초 단위의 직접적인 회전 속도를 추가합니다. (초당 약 1바퀴 = 6.28)
+	GetMesh()->AddAngularImpulseInRadians(SpinAxis * 6.0f, NAME_None, true);
 	
 	// 레그돌 중에는 카메라가 마우스 회전을 무시하고 머리가 구르는 대로 360도 같이 뒹굴게 함
 	if (Camera)
@@ -254,4 +279,10 @@ void AUTPCharacter::RecoverFromRagdoll()
 	GetMesh()->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
 	GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+
+	// 일어나는 모션(몽타주) 재생
+	if (GetUpMontage && GetMesh()->GetAnimInstance())
+	{
+		GetMesh()->GetAnimInstance()->Montage_Play(GetUpMontage);
+	}
 }
