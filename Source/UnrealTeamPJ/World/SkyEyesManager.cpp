@@ -60,13 +60,13 @@ void ASkyEyesManager::Tick(float DeltaSeconds)
 
 	for (FSkyEyeRuntimeState& Eye : RuntimeEyes)
 	{
-		const bool bShouldClose = ShouldEyeClose(CameraForward, HorizontalFOV, Eye.Direction);
+		const float AngularTargetBlink = GetTargetBlinkAmount(CameraForward, HorizontalFOV, Eye.Direction);
 		float TargetBlink = 0.0f;
 
-		if (bShouldClose)
+		if (AngularTargetBlink > KINDA_SMALL_NUMBER)
 		{
 			Eye.CloseZoneElapsed += DeltaSeconds;
-			TargetBlink = Eye.CloseZoneElapsed >= ReactionDelay ? 1.0f : 0.0f;
+			TargetBlink = Eye.CloseZoneElapsed >= ReactionDelay ? AngularTargetBlink : 0.0f;
 		}
 		else
 		{
@@ -162,9 +162,10 @@ void ASkyEyesManager::InitializeFromCamera(const FVector& CameraForward, float H
 {
 	for (FSkyEyeRuntimeState& Eye : RuntimeEyes)
 	{
-		const bool bStartsClosed = ShouldEyeClose(CameraForward, HorizontalFOV, Eye.Direction);
-		Eye.BlinkAmount = bStartsClosed ? 1.0f : 0.0f;
-		Eye.CloseZoneElapsed = bStartsClosed ? ReactionDelay : 0.0f;
+		const float InitialBlink = GetTargetBlinkAmount(CameraForward, HorizontalFOV, Eye.Direction);
+		Eye.BlinkAmount = InitialBlink;
+		Eye.CloseZoneElapsed = InitialBlink > KINDA_SMALL_NUMBER ? ReactionDelay : 0.0f;
+		ApplyEyeVisual(Eye);
 	}
 }
 
@@ -189,12 +190,28 @@ void ASkyEyesManager::ApplyEyeVisual(FSkyEyeRuntimeState& Eye)
 		1.0f));
 }
 
-bool ASkyEyesManager::ShouldEyeClose(
+float ASkyEyesManager::GetTargetBlinkAmount(
 	const FVector& CameraForward,
 	float HorizontalFOV,
 	const FVector& EyeDirection) const
 {
-	const float CloseAngle = FMath::Clamp(HorizontalFOV * 0.5f + AnticipationAngle, 1.0f, 120.0f);
-	const float MinimumDot = FMath::Cos(FMath::DegreesToRadians(CloseAngle));
-	return FVector::DotProduct(CameraForward, EyeDirection) >= MinimumDot;
+	const float HalfFOV = HorizontalFOV * 0.5f;
+	const float PartialMargin = FMath::Max(PartialCloseAnticipationAngle, FullyClosedAnticipationAngle);
+	const float FullyClosedMargin = FMath::Min(PartialCloseAnticipationAngle, FullyClosedAnticipationAngle);
+	const float PartialCloseAngle = FMath::Clamp(HalfFOV + PartialMargin, 1.0f, 140.0f);
+	const float FullyClosedAngle = FMath::Clamp(HalfFOV + FullyClosedMargin, 1.0f, PartialCloseAngle);
+	const float EyeAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(
+		FVector::DotProduct(CameraForward, EyeDirection), -1.0f, 1.0f)));
+
+	if (EyeAngle >= PartialCloseAngle)
+	{
+		return 0.0f;
+	}
+	if (EyeAngle <= FullyClosedAngle || FMath::IsNearlyEqual(PartialCloseAngle, FullyClosedAngle))
+	{
+		return 1.0f;
+	}
+
+	const float CloseProgress = (PartialCloseAngle - EyeAngle) / (PartialCloseAngle - FullyClosedAngle);
+	return FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(CloseProgress, 0.0f, 1.0f));
 }

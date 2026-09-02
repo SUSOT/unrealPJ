@@ -49,7 +49,7 @@ private:
 	void DestroyEyes();
 	void InitializeFromCamera(const FVector& CameraForward, float HorizontalFOV);
 	void ApplyEyeVisual(FSkyEyeRuntimeState& Eye);
-	bool ShouldEyeClose(const FVector& CameraForward, float HorizontalFOV, const FVector& EyeDirection) const;
+	float GetTargetBlinkAmount(const FVector& CameraForward, float HorizontalFOV, const FVector& EyeDirection) const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Sky Eyes")
@@ -82,14 +82,19 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Layout", meta = (ClampMin = "0.1"))
 	float EyeTextureAspectRatio = 1.5f;
 
-	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Behavior", meta = (ClampMin = "0.0", ClampMax = "45.0"))
-	float AnticipationAngle = 18.0f;
+	/** Starts closing this many degrees before an eye reaches the camera frustum. */
+	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Behavior", meta = (ClampMin = "0.0", ClampMax = "60.0"))
+	float PartialCloseAnticipationAngle = 30.0f;
+
+	/** Is fully closed this many degrees before an eye reaches the camera frustum. */
+	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Behavior", meta = (ClampMin = "0.0", ClampMax = "60.0"))
+	float FullyClosedAnticipationAngle = 22.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Behavior", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ReactionDelay = 0.14f;
 
 	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Behavior", meta = (ClampMin = "0.01", ClampMax = "2.0"))
-	float CloseDuration = 0.10f;
+	float CloseDuration = 0.14f;
 
 	UPROPERTY(EditAnywhere, Category = "Sky Eyes|Behavior", meta = (ClampMin = "0.01", ClampMax = "3.0"))
 	float OpenDuration = 0.35f;
