@@ -1,0 +1,10 @@
+UE4 Paragon Animations on Mannequin
+Source: https://github.com/TCMabe/UE4_Paragon_Anims_on_Mannequin
+
+Files used from the Sparrow animation set:
+- Death_Fwd.uasset
+- Death_Bwd.uasset
+
+These animations are licensed for use in Epic Unreal Engine projects and remain
+subject to the Epic Unreal Engine and Paragon content license terms described by
+the source repository. They are used only inside this Unreal Engine project.

@@ -8,6 +8,8 @@
 #include "UTPCharacter.generated.h"
 
 struct FInputActionValue;
+class UAnimInstance;
+class UAnimSequence;
 
 UCLASS()
 class UNREALTEAMPJ_API AUTPCharacter : public ACharacter
@@ -64,9 +66,22 @@ protected:
 	FTimerHandle FallRagdollTimerHandle;
 	FTimerHandle RecoverRagdollTimerHandle;
 	bool bIsRagdolled = false;
+	bool bIsRecoveringFromRagdoll = false;
+	bool bRecoveryPhysicsBlendFinished = false;
+	bool bRagdollFaceUp = false;
+	float RagdollRecoveryElapsed = 0.0f;
+	float RecoveryAnimationDuration = 0.0f;
+
+	UPROPERTY(Transient)
+	TSubclassOf<UAnimInstance> CachedAnimBlueprintClass;
 
 	void StartRagdoll();
 	void RecoverFromRagdoll();
+	void UpdateRagdollRecovery(float DeltaTime);
+	void FinalizeRecoveryPhysicsBlend();
+	void FinishRagdollRecovery();
+	void PlayGetUpAnimation(UAnimSequence* Animation);
+	void RestoreAnimationBlueprint();
 
 public:
 	void Input_Move(const FInputActionValue& InputValue);
@@ -90,9 +105,17 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Ragdoll")
 	float RagdollTriggerHeight = 200.0f;
 
-	// 일어날 때 재생할 몽타주
-	UPROPERTY(EditAnywhere, Category = "Animation")
-	class UAnimMontage* GetUpMontage;
+	UPROPERTY(EditAnywhere, Category = "Ragdoll", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float RagdollRestTime = 1.25f;
+
+	UPROPERTY(EditAnywhere, Category = "Ragdoll", meta = (ClampMin = "0.1", UIMin = "0.1"))
+	float RagdollRecoveryBlendDuration = 0.25f;
+
+	UPROPERTY(EditAnywhere, Category = "Animation|Recovery")
+	TObjectPtr<UAnimSequence> GetUpFaceDownAnimation;
+
+	UPROPERTY(EditAnywhere, Category = "Animation|Recovery")
+	TObjectPtr<UAnimSequence> GetUpFaceUpAnimation;
 
 protected:
 	UPROPERTY(EditAnywhere, Category = Move)

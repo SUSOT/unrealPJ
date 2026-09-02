@@ -10,6 +10,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Camera/CameraShakeBase.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimSingleNodeInstance.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 
@@ -29,6 +32,11 @@ AUTPCharacter::AUTPCharacter()
 	{
 		GetMesh()->SetSkeletalMesh(MeshRef.Object);
 	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> GetUpFaceDownRef(TEXT("/Game/Animation/Recovery/A_UTP_GetUp_FaceDown.A_UTP_GetUp_FaceDown"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> GetUpFaceUpRef(TEXT("/Game/Animation/Recovery/A_UTP_GetUp_FaceUp.A_UTP_GetUp_FaceUp"));
+	GetUpFaceDownAnimation = GetUpFaceDownRef.Object;
+	GetUpFaceUpAnimation = GetUpFaceUpRef.Object;
 
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationPitch = false;
@@ -63,12 +71,19 @@ AUTPCharacter::AUTPCharacter()
 void AUTPCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	CachedAnimBlueprintClass = GetMesh()->GetAnimClass();
 }
 
 // Called every frame
 void AUTPCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (bIsRecoveringFromRagdoll)
+	{
+		UpdateRagdollRecovery(DeltaTime);
+		return;
+	}
 
 	// 떨어지는 중일 때 가장 높은 Z값을 갱신 (점프 등으로 더 높아질 수 있으므로)
 	if (GetCharacterMovement()->IsFalling())
@@ -128,6 +143,11 @@ void AUTPCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 void AUTPCharacter::Input_Move(const FInputActionValue& InputValue)
 {
+	if (bIsRagdolled || bIsRecoveringFromRagdoll)
+	{
+		return;
+	}
+
 	FVector2D MovementVector = InputValue.Get<FVector2D>();
 
 	if (Controller != nullptr)
@@ -178,8 +198,7 @@ void AUTPCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 
 	{
 		if (bIsRagdolled)
 		{
-			// 레그돌 상태였다면 3초 후 회복하도록 타이머 설정
-			GetWorldTimerManager().SetTimer(RecoverRagdollTimerHandle, this, &AUTPCharacter::RecoverFromRagdoll, 3.0f, false);
+			GetWorldTimerManager().SetTimer(RecoverRagdollTimerHandle, this, &AUTPCharacter::RecoverFromRagdoll, RagdollRestTime, false);
 		}
 	}
 }
@@ -237,10 +256,21 @@ void AUTPCharacter::RecoverFromRagdoll()
 		return;
 	}
 
-	bIsRagdolled = false;
-
 	// 레그돌 메쉬의 현재 위치(골반 부근)를 가져옴
 	FVector PelvisLocation = GetMesh()->GetSocketLocation(TEXT("pelvis"));
+	const FVector HeadLocation = GetMesh()->GetSocketLocation(TEXT("head"));
+	const FQuat PelvisRotation = GetMesh()->GetSocketQuaternion(TEXT("pelvis"));
+	bRagdollFaceUp = PelvisRotation.RotateVector(FVector::UpVector).Z > 0.0f;
+
+	FVector RecoveryForward = (HeadLocation - PelvisLocation).GetSafeNormal2D();
+	if (bRagdollFaceUp)
+	{
+		RecoveryForward *= -1.0f;
+	}
+	if (!RecoveryForward.IsNearlyZero())
+	{
+		SetActorRotation(RecoveryForward.Rotation());
+	}
 
 	// 레그돌 비활성화 전 캡슐(액터)을 메쉬가 굴러간 위치로 이동시킴
 	// 바닥을 찾아서 캡슐이 땅에 정확히 서도록 설정
@@ -261,7 +291,73 @@ void AUTPCharacter::RecoverFromRagdoll()
 		SetActorLocation(PelvisLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 
-	// 레그돌 비활성화 및 원래 위치로 복구
+	bIsRagdolled = false;
+	bIsRecoveringFromRagdoll = true;
+	bRecoveryPhysicsBlendFinished = false;
+	RagdollRecoveryElapsed = 0.0f;
+
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	GetMesh()->SetAllPhysicsLinearVelocity(FVector::ZeroVector);
+	GetMesh()->SetAllPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	GetMesh()->PutAllRigidBodiesToSleep();
+	GetMesh()->bBlendPhysics = true;
+	GetMesh()->SetAllBodiesPhysicsBlendWeight(1.0f);
+
+	UAnimSequence* RecoveryAnimation = bRagdollFaceUp ? GetUpFaceUpAnimation : GetUpFaceDownAnimation;
+	RecoveryAnimationDuration = RecoveryAnimation ? RecoveryAnimation->GetPlayLength() : RagdollRecoveryBlendDuration;
+	PlayGetUpAnimation(RecoveryAnimation);
+}
+
+void AUTPCharacter::PlayGetUpAnimation(UAnimSequence* Animation)
+{
+	if (!Animation)
+	{
+		return;
+	}
+
+	GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	GetMesh()->PlayAnimation(Animation, false);
+	if (UAnimSingleNodeInstance* SingleNodeInstance = GetMesh()->GetSingleNodeInstance())
+	{
+		SingleNodeInstance->SetPosition(Animation->GetPlayLength(), false);
+		SingleNodeInstance->SetReverse(true);
+		SingleNodeInstance->SetPlaying(true);
+	}
+}
+
+void AUTPCharacter::UpdateRagdollRecovery(float DeltaTime)
+{
+	RagdollRecoveryElapsed += DeltaTime;
+	const float BlendDuration = FMath::Max(RagdollRecoveryBlendDuration, 0.1f);
+	const float Alpha = FMath::Clamp(RagdollRecoveryElapsed / BlendDuration, 0.0f, 1.0f);
+	const float SmoothedAlpha = FMath::SmoothStep(0.0f, 1.0f, Alpha);
+
+	if (!bRecoveryPhysicsBlendFinished)
+	{
+		GetMesh()->SetAllBodiesPhysicsBlendWeight(1.0f - SmoothedAlpha);
+	}
+
+	if (Alpha >= 1.0f)
+	{
+		FinalizeRecoveryPhysicsBlend();
+	}
+
+	if (RagdollRecoveryElapsed >= RecoveryAnimationDuration)
+	{
+		FinishRagdollRecovery();
+	}
+}
+
+void AUTPCharacter::FinalizeRecoveryPhysicsBlend()
+{
+	if (bRecoveryPhysicsBlendFinished)
+	{
+		return;
+	}
+
+	GetMesh()->SetAllBodiesPhysicsBlendWeight(0.0f);
+	GetMesh()->bBlendPhysics = false;
 	GetMesh()->SetAllUseCCD(false);
 	GetMesh()->SetSimulatePhysics(false);
 	GetMesh()->SetCollisionProfileName(TEXT("CharacterMesh"));
@@ -280,9 +376,27 @@ void AUTPCharacter::RecoverFromRagdoll()
 	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
 	GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
-	// 일어나는 모션(몽타주) 재생
-	if (GetUpMontage && GetMesh()->GetAnimInstance())
+	bRecoveryPhysicsBlendFinished = true;
+}
+
+void AUTPCharacter::RestoreAnimationBlueprint()
+{
+	if (CachedAnimBlueprintClass)
 	{
-		GetMesh()->GetAnimInstance()->Montage_Play(GetUpMontage);
+		GetMesh()->SetAnimInstanceClass(CachedAnimBlueprintClass);
 	}
+	else
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	}
+}
+
+void AUTPCharacter::FinishRagdollRecovery()
+{
+	FinalizeRecoveryPhysicsBlend();
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	bIsRecoveringFromRagdoll = false;
+	RagdollRecoveryElapsed = 0.0f;
+	RecoveryAnimationDuration = 0.0f;
+	RestoreAnimationBlueprint();
 }
