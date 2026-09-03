@@ -129,8 +129,8 @@ void AUTPCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this,&AUTPCharacter::Input_Look);
 
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AUTPCharacter::Sprint);
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AUTPCharacter::StopSprint);
+		//EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AUTPCharacter::Sprint);
+		//EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AUTPCharacter::StopSprint);
 		
 		if (JumpAction)
 		{
