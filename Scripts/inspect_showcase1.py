@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 import unreal
 
@@ -53,6 +54,7 @@ for actor in actors:
         record['post_process'] = str(actor.get_editor_property('settings'))
     report['actors'].append(record)
 
-with (OUTPUT / 'inspection.json').open('w', encoding='utf-8') as output_file:
+filename = sys.argv[1] if len(sys.argv) > 1 else 'inspection.json'
+with (OUTPUT / filename).open('w', encoding='utf-8') as output_file:
     json.dump(report, output_file, ensure_ascii=False, indent=2)
 unreal.log_warning('SHOWCASE_INSPECTION_COMPLETE actors=%d output=%s' % (len(actors), OUTPUT))

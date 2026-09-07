@@ -1,0 +1,50 @@
+{
+  "SW_Loop_Step_0": {
+    "seconds": 0.106,
+    "peak": 0.5,
+    "rms": 0.0496,
+    "loop": false
+  },
+  "SW_Loop_Step_1": {
+    "seconds": 0.108,
+    "peak": 0.5,
+    "rms": 0.0427,
+    "loop": false
+  },
+  "SW_Loop_Step_2": {
+    "seconds": 0.113,
+    "peak": 0.5,
+    "rms": 0.0403,
+    "loop": false
+  },
+  "SW_Loop_Step_3": {
+    "seconds": 0.11,
+    "peak": 0.5,
+    "rms": 0.046,
+    "loop": false
+  },
+  "SW_Loop_ChairDrag": {
+    "seconds": 1.45,
+    "peak": 0.4,
+    "rms": 0.029,
+    "loop": false
+  },
+  "SW_Loop_Relay": {
+    "seconds": 0.252,
+    "peak": 0.27,
+    "rms": 0.03,
+    "loop": false
+  },
+  "SW_Loop_RoomTone": {
+    "seconds": 12.0,
+    "peak": 0.0619,
+    "rms": 0.0288,
+    "loop": true
+  },
+  "SW_Loop_Cutlery": {
+    "seconds": 1.5,
+    "peak": 0.35,
+    "rms": 0.015070759575036119,
+    "loop": false
+  }
+}
