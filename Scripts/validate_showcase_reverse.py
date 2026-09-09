@@ -10,6 +10,8 @@ levels=u.get_editor_subsystem(u.LevelEditorSubsystem)
 editor=u.get_editor_subsystem(u.UnrealEditorSubsystem)
 out=Path(u.Paths.project_saved_dir())/'ShowcaseExpansion'
 assert levels.load_level('/Game/Developers/MOON/Level/Showcase1')
+saved_director=next(a for a in u.get_editor_subsystem(u.EditorActorSubsystem).get_all_level_actors() if isinstance(a,u.ShowcaseLoopDirector))
+saved_focus_peak=saved_director.get_editor_property('reverse_focus_light').get_component_by_class(u.LightComponent).get_editor_property('intensity')
 report={'checks':[],'events':[]}
 state={'busy':False,'next':time.monotonic(),'start':time.monotonic()}
 def check(test,message):
@@ -38,16 +40,17 @@ def scenario():
     tone=d.get_editor_property('room_tone')
     baseline_volume=tone.get_editor_property('volume_multiplier')
     focus=d.get_editor_property('reverse_focus_light').get_component_by_class(u.LightComponent)
-    saved_focus=u.get_editor_subsystem(u.EditorActorSubsystem).get_all_level_actors()
-    focus_peak=next(a for a in saved_focus if a.get_actor_label()=='Loop_Reverse_TableLight').get_component_by_class(u.LightComponent).get_editor_property('intensity')
+    focus_peak=saved_focus_peak
     check(focus.get_editor_property('intensity')<.01,'Reverse spotlight starts off on ordinary forward route')
     movement=pawn.get_component_by_class(u.CharacterMovementComponent)
     movement.set_movement_mode(u.MovementMode.MOVE_FLYING)
     height=pawn.get_component_by_class(u.CapsuleComponent).get_scaled_capsule_half_height()+24
     r=d.get_editor_property('loop_radius'); s=[220.0]
+    straight=d.get_editor_property('straight_corridor')
     def place(value,back=True):
-        a=value/r
-        pawn.set_actor_location(u.Vector((r-115)*math.sin(a),r-(r-115)*math.cos(a)+50,height),False,True)
+        a=0 if straight else value/r
+        location=u.Vector(value,165,height) if straight else u.Vector((r-115)*math.sin(a),r-(r-115)*math.cos(a)+50,height)
+        pawn.set_actor_location(location,False,True)
         pc.set_control_rotation(u.Rotator(yaw=math.degrees(a)+(180 if back else 0)))
         movement.stop_movement_immediately(); s[0]=value
     def walk(target,back=True):
@@ -97,8 +100,8 @@ def scenario():
     place(s[0],False); yield .6
     yield from walk(220,False)
     check(count('ReverseScrapeBehind')==1 and count('ReverseCutlery')==1,'Reverse encounter is one-shot during this playthrough')
-    yield from walk(4300,False)
-    check(d.get_editor_property('current_stage')==1,'Returning and taking the proper route still starts normal 40m progression')
+    yield from walk(2050 if straight else 4300,False)
+    check(d.get_editor_property('current_stage')==1,'Returning and taking the proper route still starts the first forward stage')
     u.AudioMixerLibrary.stop_recording_output(world,u.AudioRecordingExportType.WAV_FILE,'showcase_reverse_runtime',str(out))
     state['recording']=False
     yield 1

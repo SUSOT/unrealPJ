@@ -41,6 +41,15 @@ class UNREALTEAMPJ_API AShowcaseRepeatExtension : public AActor
 
 public:
 	AShowcaseRepeatExtension();
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** Recycle distant straight cells around the player; never move the player. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Showcase Extension")
+	bool bInfiniteStraight = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Showcase Extension")
+	int32 FirstCellIndex = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Showcase Extension")
+	int32 RecycledCellCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Showcase Extension", meta = (ClampMin = "1", ClampMax = "1000"))
 	int32 RepeatCount = 196;
@@ -73,6 +82,7 @@ protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 private:
+	TArray<int32> CellIndices;
 	UPROPERTY(VisibleAnywhere, Instanced, Category = "Showcase Extension")
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> GeneratedMeshes;
 };

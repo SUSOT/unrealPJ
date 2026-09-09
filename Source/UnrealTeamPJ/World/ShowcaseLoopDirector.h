@@ -35,6 +35,8 @@ class UNREALTEAMPJ_API AShowcaseLoopDirector : public AActor
 public:
 	AShowcaseLoopDirector();
 	virtual void Tick(float DeltaSeconds) override;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") bool bStraightCorridor = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") float StraightRepeatSpan = 28800.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") FVector LoopCenter = FVector(0,3105.7749,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") float LoopRadius = 3055.7749f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") float WalkwayRadiusOffset = -115.f;
@@ -42,7 +44,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="100")) float SecondChangeDistance = 7000.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="100")) float TurnBackUnlockDistance = 9000.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="100")) float RequiredBacktrackDistance = 500.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="600")) float DoorDistanceAhead = 1800.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="450")) float DoorDistanceAhead = 1800.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Flicker") bool bEnableLightFlicker = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Flicker", meta=(ClampMin="0", ClampMax="1")) float FlickerStrength = 1.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Flicker", meta=(Units="s", ClampMin="6", ClampMax="60")) float FlickerInterval = 10.f;
@@ -54,6 +56,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> ChairDragSound;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> RelaySound;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> RoomToneSound;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> DistantKnockSound;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound", meta=(ClampMin="0", ClampMax="1")) float HorrorVolume = .8f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") bool bEnablePresenceAudio = true;
 	/** Optional hook for directional captions/accessibility, emitted at actual cue playback. */
@@ -97,12 +100,18 @@ private:
 	TSet<int32> ReversedSigns;
 	TSet<int32> WitnessedChanges;
 	TMap<int32,float> ObservedTime;
+	TMap<int32,float> OriginalChangeX;
 	FShowcaseEscapeProgress Progress;
 	FShowcasePresenceRhythm Presence;
 	FShowcaseReverseEncounterState ReverseEncounter;
 	float ReverseQuietAmount = 0.f, ReverseFocusIntensity = 0.f;
 	TWeakObjectPtr<APawn> TrackedPawn;
 	float PreviousAngle = 0.f;
+	float PreviousStraightX = 0.f;
+	float PlayerPathPosition = 0.f;
+	int32 DreadBeatStage = 0;
+	FVector LinearDoorPosition;
+	bool bLinearDoorNoticed = false;
 	bool bHasSample = false;
 	float StageStartedAt = 0.f;
 	int32 NextCuePlayer = 0, StepVariation = 0;
@@ -123,5 +132,7 @@ private:
 	float GetReverseLampMultiplier(int32 LampIndex) const;
 	void SilencePresence();
 	void TryRevealDoor(float Angle);
+	FVector PathPoint(float Distance, float Side, float Height) const;
+	void UpdateStraightDread();
 	UFUNCTION() void HandleEscaped();
 };

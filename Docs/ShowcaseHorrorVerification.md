@@ -71,3 +71,50 @@ packaged build playthrough, or 60FPS benchmark was performed in this revision.
   transitions and sustained outage confirmed; no unrelated gameplay changes.
 - Map SHA256 before/after unchanged:
   `154AE5E913528DFA160F4879B6367BB6F4C959C0575287B1B2AD4EB0DCC4AF7D`.
+
+## Straight corridor revision (2026-09-07)
+
+- Scope: Showcase1 changed from a circular diner to 24 straight 12m cells around
+  the player. Distant cells/fixtures are recycled without teleporting the player.
+  New pacing is 18/38/60m. A doorway is placed about 5.5m behind outside the view;
+  the first stationary turn reveals it, and its position locks once observed.
+- Existing reverse-table encounter converted to straight coordinates. Corrected
+  its test harness to obtain saved light settings before PIE starts.
+- Horror presentation: uneven spatial knocks from retained CC0 source audio,
+  late footsteps, witness-dependent furniture, hard electrical failures, a dark
+  vanishing point, and readable nearby pools of light. Research and tuning values:
+  `Docs/ShowcaseStraightResearch.md`.
+- Backup: `Saved/ShowcaseExpansion/Backup/Straight_20260907/`.
+- `ShowcaseStraightPIE.log`: 721 floor samples and 700 capsule sweeps passed;
+  immediate turn-to-door, fixed observed door, physical crossing, safe destination
+  and restart passed. Audio output peak 0.076355, non-silent and unclipped.
+- Cell recycling tested at nine positions from -450m to +460m: at least 110m
+  of floor ahead/behind at every position, no player relocation, 122 recycled
+  cells, constant 4008 HISM instances. This is functional coverage, not an FPS claim.
+- `ShowcaseStraightReverse.log`: all 15 reverse encounter assertions passed,
+  including seeing the backrest, hidden tuck, cutlery, one-shot replay protection,
+  ambience restore and normal-route return. Actual audio peak 0.127014.
+- `ShowcaseStraightFlicker.log`: 742 samples, direct light and bulb emissive
+  minima 0; 11 abrupt transitions, ten detected blink/blink/outage patterns,
+  longest full outage 2.986s, at least five fixtures above 20% intensity.
+- Editor and game Development builds passed. `ShowcaseStraightNative.log`:
+  all four existing Showcase state regression tests passed.
+- Direct scope review: preserves character/input and destination. Destruction
+  limited to the 72 named circular fixtures/changes/signs replaced by straight
+  versions. Backup retains them. Shared RestaurantScene materials were not edited;
+  19 local copies provide serialized HISM usage flags, plus local exit materials.
+- Direct code review: streaming bounded to a fixed window; geometry updates occur
+  at cell crossings; audio reuses the existing eight components; no new per-frame
+  asset loading. Door collision/traversal verified through actual pawn movement.
+- `git diff --check` passed. Validation and preview scripts do not save changes.
+- First renderer exposed overly dark nearby surfaces; corrected light radii,
+  spot/fill intensities and inherited shadow grading. Saved-level renders:
+  `straight_start.png`, `straight_dread.png`, `straight_turn_door.png`.
+- Final exit polish gives the door/frame low emissive visibility. A blocking
+  overlap check selects a furniture-free location 4.5–9m behind (prefers 5.5m),
+  addressing a table clipping the first preview's doorframe. Follow-up runs:
+  `ShowcaseStraightPIEFinal.log`, `ShowcaseStraightClearDoorRender.log`.
+- Final saved map SHA256:
+  `130C8C6ABCDEEBF067BAF15ED0DDE665EFA4AC1182BFA283D988ECFFC40DBBC5`.
+
+No packaged-playthrough, blind human fear study, or 60FPS benchmark is claimed.

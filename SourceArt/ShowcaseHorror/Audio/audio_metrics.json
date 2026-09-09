@@ -46,5 +46,11 @@
     "peak": 0.35,
     "rms": 0.015070759575036119,
     "loop": false
+  },
+  "SW_Loop_DistantKnock": {
+    "seconds": 4,
+    "peak": 0.55,
+    "rms": 0.03194684154490815,
+    "loop": false
   }
 }

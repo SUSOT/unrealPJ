@@ -70,7 +70,8 @@ def tick(delta):
                       minimum_lit_lamps=min(sum(v>.2 for v in s) for s in samples),stage=state['director'].get_editor_property('current_stage'),bulb_minimum=state['bulb_min'])
         assert report['stage']==3,'Did not reach distortion stage'
         assert report['lowest_ratio']<.12,'No distinct local flicker; light never dips below 12%'
-        assert report['minimum_lit_lamps']>=12,'Too many lamps dark at once'
+        minimum=1 if state['director'].get_editor_property('straight_corridor') else 12
+        assert report['minimum_lit_lamps']>=minimum,'No readable light remains beside or behind the player'
         assert state['bulbs'] and state['bulb_min']<.12,'Lamp surface still glows while its light is off'
         # Inspect real rendered-material inputs, not the director's private clock.
         # Require two hard off/on blinks followed by a sustained fully-off interval.

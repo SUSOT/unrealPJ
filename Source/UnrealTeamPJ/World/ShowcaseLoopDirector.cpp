@@ -48,6 +48,11 @@ void AShowcaseLoopDirector::BeginPlay()
 	ReverseEncounter = FShowcaseReverseEncounterState();
 	ReverseEncounterStage = 0;
 	ReverseQuietAmount = 0.f;
+	DreadBeatStage=0;
+	bLinearDoorNoticed=false;
+	OriginalChangeX.Reset();
+	for (int32 I=0; I<SpatialChanges.Num(); ++I)
+		if (IsValid(SpatialChanges[I].Target)) OriginalChangeX.Add(I,SpatialChanges[I].Target->GetActorLocation().X);
 	if (IsValid(ReverseFocusLight))
 	{
 		ReverseFocusIntensity = ReverseFocusLight->GetLightComponent()->Intensity;
@@ -146,19 +151,23 @@ void AShowcaseLoopDirector::Tick(float DeltaSeconds)
 	// Conservative 3D cone includes the viewport corners and a pop-in guard band.
 	ViewCosine = FMath::Cos(FMath::DegreesToRadians(FMath::Min(100.f, FOV * .5f + 25.f)));
 	const FVector Relative = Pawn->GetActorLocation() - LoopCenter;
-	const float Angle = FMath::Atan2(Relative.X, -Relative.Y);
+	const float Angle = bStraightCorridor ? 0.f : FMath::Atan2(Relative.X, -Relative.Y);
 	const float Radius = Relative.Size2D();
-	const bool bInCorridor = FMath::Abs(Radius - LoopRadius) < 500.f && Relative.Z > 50.f && Relative.Z < 360.f;
+	const bool bInCorridor = (bStraightCorridor ? FMath::Abs(Pawn->GetActorLocation().Y-50.f)<440.f : FMath::Abs(Radius-LoopRadius)<500.f)
+		&& Relative.Z>50.f && Relative.Z<360.f;
+	PlayerPathPosition=bStraightCorridor ? Pawn->GetActorLocation().X : Angle*LoopRadius;
 	if (TrackedPawn != Pawn || !bHasSample || !bInCorridor)
 	{
 		Presence = FShowcasePresenceRhythm();
 		TrackedPawn = Pawn;
 		PreviousAngle = Angle;
+		PreviousStraightX=Pawn->GetActorLocation().X;
 		bHasSample = bInCorridor;
 		return;
 	}
-	const float Delta = FMath::FindDeltaAngleRadians(PreviousAngle, Angle) * LoopRadius;
+	const float Delta = bStraightCorridor ? Pawn->GetActorLocation().X-PreviousStraightX : FMath::FindDeltaAngleRadians(PreviousAngle, Angle)*LoopRadius;
 	PreviousAngle = Angle;
+	PreviousStraightX=Pawn->GetActorLocation().X;
 	// Exclude teleports, falling out of the map, and editor relocation from progress.
 	if (FMath::Abs(Delta) > FMath::Max(150.f, DeltaSeconds * 1400.f)) return;
 	const FVector ForwardTangent(FMath::Cos(Angle), FMath::Sin(Angle), 0);
@@ -175,9 +184,59 @@ void AShowcaseLoopDirector::Tick(float DeltaSeconds)
 		UE_LOG(LogTemp, Display, TEXT("ShowcaseEscape: stage %d at %.1f m"), CurrentStage, ForwardProgress / 100.f);
 	}
 	UpdateReverseEncounter(DeltaSeconds, Angle);
+	if (bStraightCorridor) UpdateStraightDread();
 	UpdatePresence(DeltaSeconds, FMath::Abs(Delta), bLookingBack, Angle);
 	UpdateAtmosphere(DeltaSeconds);
-	if (Progress.bDoorRequested && EscapeDoor && !EscapeDoor->bRevealed) TryRevealDoor(Angle);
+	if (!bStraightCorridor && Progress.bDoorRequested && EscapeDoor && !EscapeDoor->bRevealed) TryRevealDoor(Angle);
+}
+
+FVector AShowcaseLoopDirector::PathPoint(float Distance, float Side, float Height) const
+{
+	if (bStraightCorridor) return FVector(PlayerPathPosition+Distance,165.f+Side,LoopCenter.Z+Height);
+	const float Angle=(PlayerPathPosition+Distance)/LoopRadius;
+	const float Radius=LoopRadius+WalkwayRadiusOffset+Side;
+	return LoopCenter+FVector(Radius*FMath::Sin(Angle),-Radius*FMath::Cos(Angle),Height);
+}
+
+void AShowcaseLoopDirector::UpdateStraightDread()
+{
+	if (CurrentStage>DreadBeatStage)
+	{
+		DreadBeatStage=CurrentStage;
+		const FVector Source=PathPoint(CurrentStage==1 ? -420.f : 950.f,CurrentStage==1 ? -535.f : 300.f,160.f);
+		PlayCue(DistantKnockSound,Source,CurrentStage==1 ? .7f : .9f,CurrentStage==1 ? .92f : .76f,TEXT("DistantKnock"));
+		SilenceUntil=GetWorld()->GetTimeSeconds()+2.4f;
+	}
+	if (CurrentStage<3 || !EscapeDoor) return;
+	if (EscapeDoor->bRevealed && !IsUnseen(EscapeDoor->GetActorLocation()+FVector(0,0,160),100.f)) bLinearDoorNoticed=true;
+	if (bLinearDoorNoticed) return;
+	// Place while looking forward, so the complete doorway is already present on
+	// the first turn. Keep it nearby if the player chooses to walk farther first.
+	FVector Position;
+	bool bClear=false;
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(ShowcaseDoorClearance),false,this);
+	Query.AddIgnoredActor(TrackedPawn.Get());
+	Query.AddIgnoredActor(EscapeDoor);
+	for (float Adjustment : {0.f,50.f,-50.f,100.f,-100.f,150.f,200.f,250.f,300.f,350.f})
+	{
+		const float Distance=FMath::Clamp(DoorDistanceAhead+Adjustment,450.f,900.f);
+		Position=PathPoint(-Distance,0,20);
+		// Keep the frame clear of tabletops/booths. Bottom is above the floor.
+		if (!GetWorld()->OverlapBlockingTestByChannel(Position+FVector(0,0,160),FQuat::Identity,ECC_Visibility,
+			FCollisionShape::MakeBox(FVector(28,125,155)),Query)) { bClear=true; break; }
+	}
+	if (!bClear) return;
+	for (float Y : {-125.f,0.f,125.f})
+		for (float Z : {40.f,320.f})
+			if (!IsUnseen(Position+FVector(0,Y,Z),125.f)) return;
+	if (EscapeDoor->bRevealed)
+	{
+		if (!IsUnseen(EscapeDoor->GetActorLocation()+FVector(0,0,160),160.f)) return;
+		if (FVector::Dist2D(LinearDoorPosition,Position)<120.f) return;
+		EscapeDoor->SetActorLocation(Position,false,nullptr,ETeleportType::TeleportPhysics);
+	}
+	else EscapeDoor->RevealAt(FTransform(FRotator::ZeroRotator,Position));
+	LinearDoorPosition=Position;
 }
 
 void AShowcaseLoopDirector::UpdateAtmosphere(float DeltaSeconds)
@@ -198,8 +257,11 @@ void AShowcaseLoopDirector::UpdateAtmosphere(float DeltaSeconds)
 			if (SeenFor > .35f) WitnessedChanges.Add(Index);
 		}
 		if (CurrentStage < Change.Stage || !WitnessedChanges.Contains(Index) || Now < NextSpatialChangeAt) continue;
-		if (!IsUnseen(Center, Extent.Size()) || !IsUnseen(Change.ChangedTransform.GetLocation(), Extent.Size())) continue;
-		Change.Target->SetActorTransform(Change.ChangedTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		FTransform Changed=Change.ChangedTransform;
+		if (bStraightCorridor && StraightRepeatSpan>0.f && OriginalChangeX.Contains(Index))
+			Changed.AddToTranslation(FVector(FMath::RoundToDouble((Change.Target->GetActorLocation().X-OriginalChangeX[Index])/StraightRepeatSpan)*StraightRepeatSpan,0,0));
+		if (!IsUnseen(Center, Extent.Size()) || !IsUnseen(Changed.GetLocation(), Extent.Size())) continue;
+		Change.Target->SetActorTransform(Changed, false, nullptr, ETeleportType::TeleportPhysics);
 		AppliedChanges.Add(Index);
 		PlayCue(ChairDragSound, Center, .7f, Change.Stage == 1 ? 1.f : .87f, TEXT("FurnitureMoved"));
 		NextSpatialChangeAt = Now+9.f;
@@ -222,6 +284,13 @@ void AShowcaseLoopDirector::UpdateAtmosphere(float DeltaSeconds)
 		if (State.AppliedStage < CurrentStage && IsUnseen(Light->GetComponentLocation(), 150.f)) State.AppliedStage = CurrentStage;
 		const int32 Stage = State.AppliedStage;
 		float Multiplier = Stage == 0 ? 1.f : Stage == 1 ? .92f : Stage == 2 ? .82f : .70f;
+		if (bStraightCorridor)
+		{
+			const float Ahead=Light->GetComponentLocation().X-PlayerPathPosition;
+			// Adjacent pools remain readable; distant lamps disappear into darkness.
+			Multiplier*=1.f-FMath::SmoothStep(1500.f,6500.f,FMath::Abs(Ahead))*.92f;
+			if (CurrentStage>=2 && Ahead>900.f) Multiplier*=.32f;
+		}
 		// A slow, shallow drift, not strobing or a jumpscare blackout.
 		if (Stage == 3) Multiplier *= 1.f + .035f * FMath::Sin(GetWorld()->GetTimeSeconds() * .55f + State.Index);
 		// Keep base illumination separate: filtering the flickered intensity would
@@ -241,7 +310,8 @@ void AShowcaseLoopDirector::UpdateReverseEncounter(float DeltaSeconds, float Ang
 	if (!IsValid(ReverseChair) || !IsValid(ReverseFocusLight)) return;
 	FVector Center, Extent;
 	ReverseChair->GetActorBounds(false,Center,Extent);
-	const bool bEligible = CurrentStage == 0 && !bEscapeComplete;
+	const bool bEligible = CurrentStage == 0 && !bEscapeComplete
+		&& (!bStraightCorridor || FMath::Abs(ReverseChair->GetActorLocation().X-ReverseChairTuckedPose.GetLocation().X)<200.f);
 	const float Distance = FVector::Dist(ViewPosition,Center);
 	// A local vignette, not a permanent global blackout or a movement barrier.
 	const float TargetQuiet = bEligible ? FMath::Clamp((-Progress.Position-200.f)/450.f,0.f,1.f)
@@ -268,9 +338,7 @@ void AShowcaseLoopDirector::UpdateReverseEncounter(float DeltaSeconds, float Ang
 	ReverseEncounterStage=static_cast<int32>(ReverseEncounter.Phase);
 	if (Events.ScrapeBehind)
 	{
-		const float Behind=Angle+360.f/LoopRadius;
-		const float Radius=LoopRadius+WalkwayRadiusOffset;
-		const FVector Source=LoopCenter+FVector(Radius*FMath::Sin(Behind),-Radius*FMath::Cos(Behind),45.f);
+		const FVector Source=PathPoint(360.f,0,45.f);
 		PlayCue(ChairDragSound,Source,.8f,.92f,TEXT("ReverseScrapeBehind"));
 	}
 	if (Events.TuckChair)
@@ -290,7 +358,13 @@ float AShowcaseLoopDirector::GetReverseLampMultiplier(int32 LampIndex) const
 float AShowcaseLoopDirector::GetFlickerMultiplier(int32 LampIndex) const
 {
 	if (!bEnableLightFlicker || CurrentStage == 0 || Lamps.IsEmpty()) return 1.f;
-	const int32 RelativeIndex = (LampIndex - LightBeatLead + Lamps.Num()) % Lamps.Num();
+	int32 RelativeIndex = (LampIndex - LightBeatLead + Lamps.Num()) % Lamps.Num();
+	if (bStraightCorridor && Lamps.IsValidIndex(LightBeatLead) && IsValid(Lamps[LampIndex]) && IsValid(Lamps[LightBeatLead]))
+	{
+		const float Delta=Lamps[LampIndex]->GetActorLocation().X-Lamps[LightBeatLead]->GetActorLocation().X;
+		if (Delta<-.1f) return 1.f;
+		RelativeIndex=FMath::RoundToInt(Delta/1200.f);
+	}
 	// Fail progressively farther ahead; the route behind stays readable.
 	if (RelativeIndex >= CurrentStage) return 1.f;
 	const float Time = GetWorld()->GetTimeSeconds() - LightBeatStartedAt - RelativeIndex * .38f;
@@ -322,9 +396,7 @@ void AShowcaseLoopDirector::PlayCue(USoundBase* Sound, FVector Position, float G
 
 void AShowcaseLoopDirector::StartLightBeat(float Angle)
 {
-	const float Radius = LoopRadius+WalkwayRadiusOffset;
-	const float Ahead = Angle+700.f/LoopRadius;
-	const FVector Point = LoopCenter+FVector(Radius*FMath::Sin(Ahead),-Radius*FMath::Cos(Ahead),250.f);
+	const FVector Point=PathPoint(700.f,0,250.f);
 	float Nearest = TNumericLimits<float>::Max();
 	for (int32 Index=0; Index<Lamps.Num(); ++Index)
 	{
@@ -343,7 +415,7 @@ void AShowcaseLoopDirector::StartLightBeat(float Angle)
 void AShowcaseLoopDirector::UpdatePresence(float DeltaSeconds, float Distance, bool bLookingBack, float Angle)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	const bool bReturningToExit = EscapeDoor && EscapeDoor->bRevealed;
+	const bool bReturningToExit = EscapeDoor && EscapeDoor->bRevealed && (!bStraightCorridor || bLinearDoorNoticed);
 	if (CurrentStage > 0 && !bReturningToExit && Now >= NextLightBeatAt) StartLightBeat(Angle);
 	const auto Events = Presence.Advance(DeltaSeconds,Distance,bReturningToExit ? 0 : CurrentStage,bLookingBack);
 	APawn* Pawn = TrackedPawn.Get();
@@ -354,9 +426,7 @@ void AShowcaseLoopDirector::UpdatePresence(float DeltaSeconds, float Distance, b
 		USoundBase* Step = FootstepSounds[StepVariation++ % FootstepSounds.Num()];
 		PlayCue(Step,Feet,.28f,1.f+(StepVariation%3-1)*.025f,TEXT("OwnFootstep"));
 		// The delayed source stays where it was scheduled, not attached to the camera.
-		const float Behind = Angle-(CurrentStage == 1 ? 430.f : 290.f)/LoopRadius;
-		const float Radius = LoopRadius+WalkwayRadiusOffset+(StepVariation%2 ? 55.f : -55.f);
-		PendingFootstepPosition = LoopCenter+FVector(Radius*FMath::Sin(Behind),-Radius*FMath::Cos(Behind),35.f);
+		PendingFootstepPosition=PathPoint(-(CurrentStage==1 ? 430.f : 290.f),StepVariation%2 ? 55.f : -55.f,35.f);
 	}
 	if ((Events.FollowerStep || Events.AfterStop) && !FootstepSounds.IsEmpty())
 	{

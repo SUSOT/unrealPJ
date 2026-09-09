@@ -1,5 +1,9 @@
 # Showcase1: 뒤돌아 탈출하기
 
+> 2026-09-07: 현재 Showcase1은 **직선 무한 복도 / 18·38·60m 진행 / 뒤돌면 바로 보이는 문**으로 변경했다.
+> 최신 동작과 조절 값은 [ShowcaseStraightResearch.md](ShowcaseStraightResearch.md)를 참고한다.
+> 아래 원형 배치·40/70/90m·5m 뒤로 걷기 내용은 이전 구현 기록이다. 원형용 설치/검증 스크립트를 현재 맵에 재적용하지 않는다.
+
 대상 맵: `/Game/Developers/MOON/Level/Showcase1`.
 캐릭터, 입력, GameMode, 다른 레벨은 변경하지 않는다. 기존 원형 통로를 유지한다.
 

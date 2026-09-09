@@ -7,10 +7,14 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/Pawn.h"
 
 AShowcaseRepeatExtension::AShowcaseRepeatExtension()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
+	PrimaryActorTick.TickInterval = .2f;
 	USceneComponent* SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SceneRoot->SetMobility(EComponentMobility::Static);
 	SetRootComponent(SceneRoot);
@@ -68,7 +72,7 @@ void AShowcaseRepeatExtension::RebuildExtension()
 			for (const FTransform& Source : Group.SourceTransforms)
 			{
 				FTransform Instance = Source;
-				Instance.AddToTranslation(FVector(Cell * SafeSpacing, 0.0f, 0.0f));
+				Instance.AddToTranslation(FVector((Cell + FirstCellIndex) * SafeSpacing, 0.0f, 0.0f));
 				Transforms.Add(Instance);
 			}
 		}
@@ -153,6 +157,57 @@ void AShowcaseRepeatExtension::BeginPlay()
 	// The asset's construction script recreates light components on reload.
 	// Reapply after all level actors have finished construction, once only.
 	ApplyFixtureDistanceLimits();
+	CellIndices.Reset();
+	for (int32 I=0; I<RepeatCount; ++I) CellIndices.Add(FirstCellIndex+I);
+	RecycledCellCount=0;
+	SetActorTickEnabled(bInfiniteStraight && RepeatCount>=16 && RepeatSpacing>=100.f);
+}
+
+void AShowcaseRepeatExtension::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const APawn* Pawn=UGameplayStatics::GetPlayerPawn(this,0);
+	if (!Pawn || !bInfiniteStraight || CellIndices.Num()!=RepeatCount) return;
+	const FVector Local=GetActorTransform().InverseTransformPosition(Pawn->GetActorLocation());
+	if (FMath::Abs(Local.Y-50.f)>600.f || Local.Z<-100.f || Local.Z>600.f) return;
+	const int32 First=FMath::FloorToInt(Local.X/RepeatSpacing)-RepeatCount/2;
+	const int32 Last=First+RepeatCount-1;
+	for (int32 Slot=0; Slot<CellIndices.Num(); ++Slot)
+	{
+		int32 Cell=CellIndices[Slot];
+		if (Cell>=First && Cell<=Last) continue;
+		const int32 Remainder=((Cell-First)%RepeatCount+RepeatCount)%RepeatCount;
+		Cell=First+Remainder;
+		int32 ComponentIndex=0;
+		for (const FShowcaseRepeatMeshGroup& Group : MeshGroups)
+		{
+			if (!Group.Mesh || Group.SourceTransforms.IsEmpty()) continue;
+			if (!GeneratedMeshes.IsValidIndex(ComponentIndex)) return;
+			UHierarchicalInstancedStaticMeshComponent* Component=GeneratedMeshes[ComponentIndex++];
+			Component->bAutoRebuildTreeOnInstanceChanges=false;
+			for (int32 I=0; I<Group.SourceTransforms.Num(); ++I)
+			{
+				FTransform T=Group.SourceTransforms[I];
+				T.AddToTranslation(FVector(Cell*RepeatSpacing,0,0));
+				Component->UpdateInstanceTransform(Slot*Group.SourceTransforms.Num()+I,T,false,false,true);
+			}
+			Component->MarkRenderStateDirty();
+			Component->BuildTreeIfOutdated(false,true);
+			Component->bAutoRebuildTreeOnInstanceChanges=true;
+		}
+		CellIndices[Slot]=Cell;
+		++RecycledCellCount;
+	}
+	const float Span=RepeatCount*RepeatSpacing;
+	for (AActor* Fixture : RepeatedFixtures)
+	{
+		if (!IsValid(Fixture)) continue;
+		const FVector P=GetActorTransform().InverseTransformPosition(Fixture->GetActorLocation());
+		const int32 Cell=FMath::FloorToInt(P.X/RepeatSpacing);
+		if (Cell>=First && Cell<=Last) continue;
+		const float Shift=FMath::FloorToFloat((First*RepeatSpacing-P.X)/Span)+1.f;
+		Fixture->AddActorWorldOffset(GetActorTransform().TransformVector(FVector(Shift*Span,0,0)),false,nullptr,ETeleportType::TeleportPhysics);
+	}
 }
 
 void AShowcaseRepeatExtension::OnConstruction(const FTransform& Transform)
