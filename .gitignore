@@ -45,6 +45,7 @@
 # Precompiled Assets
 SourceArt/**/*.png
 SourceArt/**/*.tga
+!SourceArt/ShowcaseHorror/EmergencyExit_RunMan.png
 
 # Binary Files
 Binaries/*
@@ -73,3 +74,5 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+__pycache__/
+*.pyc

@@ -3,38 +3,38 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "World/ShowcaseEscapeProgress.h"
-#include "World/ShowcasePresenceRhythm.h"
-#include "World/ShowcaseReverseEncounterState.h"
 #include "ShowcaseLoopDirector.generated.h"
 
 class AShowcaseEscapeDoor;
+class AShowcaseRepeatExtension;
+class UHierarchicalInstancedStaticMeshComponent;
 class ULightComponent;
-class ATextRenderActor;
-class UAudioComponent;
-class USoundBase;
 class UMaterialInstanceDynamic;
-class ALight;
+class UStaticMesh;
 
-USTRUCT(BlueprintType)
-struct FShowcaseSpatialChange
+UENUM(BlueprintType)
+enum class EShowcaseHorrorEvent : uint8
 {
-	GENERATED_BODY()
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) TObjectPtr<AActor> Target;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) FTransform ChangedTransform;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="1", ClampMax="3")) int32 Stage = 1;
+	None,
+	ForwardBlackout,
+	RedPulse,
+	FlickerOut,
+	ChairReveal,
+	PropDisplacement,
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FShowcaseLoopEscaped);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FShowcaseHorrorCue, FName, Cue, FVector, Location);
 
 /** Level-local single-player sequence; leaves the character and other maps untouched. */
 UCLASS()
 class UNREALTEAMPJ_API AShowcaseLoopDirector : public AActor
 {
 	GENERATED_BODY()
+
 public:
 	AShowcaseLoopDirector();
 	virtual void Tick(float DeltaSeconds) override;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") bool bStraightCorridor = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") float StraightRepeatSpan = 28800.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Geometry") FVector LoopCenter = FVector(0,3105.7749,0);
@@ -45,48 +45,52 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="100")) float TurnBackUnlockDistance = 9000.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="100")) float RequiredBacktrackDistance = 500.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Pacing", meta=(Units="cm", ClampMin="450")) float DoorDistanceAhead = 1800.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Flicker") bool bEnableLightFlicker = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Flicker", meta=(ClampMin="0", ClampMax="1")) float FlickerStrength = 1.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Flicker", meta=(Units="s", ClampMin="6", ClampMax="60")) float FlickerInterval = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Horror") bool bEnableHorrorEvents = true;
+	/** Applied once to both the light components and visible bulb emissive. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Horror", meta=(ClampMin="0", ClampMax="1")) float BaseLightScale = .72f;
+	/** Non-zero gives reproducible shuffled event order; zero chooses a new seed each play. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Horror") int32 HorrorSeed = 91357;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TObjectPtr<AShowcaseEscapeDoor> EscapeDoor;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TArray<FShowcaseSpatialChange> SpatialChanges;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TObjectPtr<AShowcaseRepeatExtension> RepeatExtension;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TObjectPtr<UStaticMesh> TableMesh;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TArray<TObjectPtr<AActor>> Lamps;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TArray<TObjectPtr<ATextRenderActor>> DirectionSigns;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TArray<TObjectPtr<USoundBase>> FootstepSounds;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> ChairDragSound;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> RelaySound;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> RoomToneSound;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") TObjectPtr<USoundBase> DistantKnockSound;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound", meta=(ClampMin="0", ClampMax="1")) float HorrorVolume = .8f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Sound") bool bEnablePresenceAudio = true;
-	/** Optional hook for directional captions/accessibility, emitted at actual cue playback. */
-	UPROPERTY(BlueprintAssignable, Category="Loop|Sound") FShowcaseHorrorCue OnHorrorCue;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Sound") TObjectPtr<UAudioComponent> RoomTone;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Sound") TArray<TObjectPtr<UAudioComponent>> CuePlayers;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TArray<TObjectPtr<AActor>> ChairProps;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TArray<TObjectPtr<AActor>> FrameProps;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Actors") TArray<TObjectPtr<AActor>> EmergencyExitSigns;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 CurrentStage = 0;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") float ForwardProgress = 0.f;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") float BacktrackProgress = 0.f;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") bool bEscapeComplete = false;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") EShowcaseHorrorEvent CurrentHorrorEvent = EShowcaseHorrorEvent::None;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 HorrorEventSerial = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 CompletedHorrorEvents = 0;
+	/** Bit N records that event enum value N has occurred during this play. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 HorrorEventHistoryMask = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 AlteredPropCount = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 AlteredChairCount = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 AlteredTableCount = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 AlteredFrameCount = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 ReversedExitSignCount = 0;
 	UPROPERTY(BlueprintAssignable, Category="Loop") FShowcaseLoopEscaped OnEscapeCompleted;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Reverse Encounter") TObjectPtr<AActor> ReverseChair;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Reverse Encounter") FTransform ReverseChairTuckedPose;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Reverse Encounter") TObjectPtr<ALight> ReverseFocusLight;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Reverse Encounter", meta=(MakeEditWidget)) FVector ReverseReturnSeatLocation;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loop|Reverse Encounter") TObjectPtr<USoundBase> ReverseCutlerySound;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Loop|Runtime") int32 ReverseEncounterStage = 0;
+
+	static FVector2D GetHorrorEventIntervalRange(int32 Stage);
+	static int32 GetHorrorPropChangeCount(int32 Stage);
+	static float GetHorrorEventDuration(EShowcaseHorrorEvent Event, int32 Stage);
+	static bool ShouldReverseExitSigns(int32 Stage, bool bDoorRevealed);
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
 	struct FLightState
 	{
 		TWeakObjectPtr<ULightComponent> Light;
 		float Intensity = 0.f;
-		float SmoothedIntensity = 0.f;
 		FLinearColor Color;
-		int32 Index = 0;
-		int32 AppliedStage = 0;
+		int32 LampIndex = 0;
 	};
 	struct FBulbState
 	{
@@ -94,45 +98,45 @@ private:
 		float Emissive = 0.f;
 		int32 LampIndex = 0;
 	};
+
 	TArray<FLightState> LightStates;
 	TArray<FBulbState> BulbStates;
-	TSet<int32> AppliedChanges;
-	TSet<int32> ReversedSigns;
-	TSet<int32> WitnessedChanges;
-	TMap<int32,float> ObservedTime;
-	TMap<int32,float> OriginalChangeX;
+	TArray<EShowcaseHorrorEvent> EventBag;
+	TSet<TWeakObjectPtr<AActor>> AlteredActorProps;
+	TSet<uint64> AlteredTableInstances;
 	FShowcaseEscapeProgress Progress;
-	FShowcasePresenceRhythm Presence;
-	FShowcaseReverseEncounterState ReverseEncounter;
-	float ReverseQuietAmount = 0.f, ReverseFocusIntensity = 0.f;
+	FRandomStream HorrorRandom;
 	TWeakObjectPtr<APawn> TrackedPawn;
 	float PreviousAngle = 0.f;
 	float PreviousStraightX = 0.f;
 	float PlayerPathPosition = 0.f;
-	int32 DreadBeatStage = 0;
+	float ViewCosine = 0.f;
+	float NextHorrorEventAt = 0.f;
+	float HorrorEventStartedAt = 0.f;
+	float HorrorEventEndsAt = 0.f;
+	float FlickerEndsAt = 0.f;
 	FVector LinearDoorPosition;
-	bool bLinearDoorNoticed = false;
-	bool bHasSample = false;
-	float StageStartedAt = 0.f;
-	int32 NextCuePlayer = 0, StepVariation = 0;
-	float NextSpatialChangeAt = 0.f, NextLightBeatAt = 0.f, LightBeatStartedAt = -100.f;
-	float SilenceUntil = 0.f, ToneGain = 1.f;
-	int32 LightBeatLead = 0, LightBeatSerial = 0;
-	FVector PendingFootstepPosition;
 	FVector ViewPosition;
 	FVector ViewForward;
-	float ViewCosine = 0.f;
+	bool bHasSample = false;
+	bool bLinearDoorNoticed = false;
+	bool bChairRevealPending = false;
+	bool bExitSignsReversed = false;
+
 	bool IsUnseen(const FVector& Point, float Margin = 100.f) const;
-	void UpdateAtmosphere(float DeltaSeconds);
-	float GetFlickerMultiplier(int32 LampIndex) const;
-	void UpdatePresence(float DeltaSeconds, float Distance, bool bLookingBack, float Angle);
-	void PlayCue(USoundBase* Sound, FVector Position, float Gain, float Pitch, FName Cue);
-	void StartLightBeat(float Angle);
-	void UpdateReverseEncounter(float DeltaSeconds, float Angle);
-	float GetReverseLampMultiplier(int32 LampIndex) const;
-	void SilencePresence();
+	bool IsLampAhead(int32 LampIndex) const;
+	void UpdateHorrorEvents();
+	void StartHorrorEvent();
+	void FinishHorrorEvent();
+	void ApplyHorrorLighting(float Now);
+	void RefillEventBag();
+	void RevealFallenChair();
+	void ApplyRandomPropChanges();
+	bool ChangeActorProp(const TArray<TObjectPtr<AActor>>& Props, bool bFrame, bool bAllowVisible);
+	bool ChangeTableInstance();
+	void UpdateExitSigns();
 	void TryRevealDoor(float Angle);
+	void UpdateStraightDoor();
 	FVector PathPoint(float Distance, float Side, float Height) const;
-	void UpdateStraightDread();
 	UFUNCTION() void HandleEscaped();
 };
