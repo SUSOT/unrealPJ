@@ -10,7 +10,7 @@ public class UnrealTeamPJ : ModuleRules
 
         PublicIncludePaths.AddRange(new string[] { "UnrealTeamPJ" });
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "Landscape" });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "Landscape", "Foliage" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
