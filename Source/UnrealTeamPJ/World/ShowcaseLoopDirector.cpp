@@ -35,6 +35,7 @@ void AShowcaseLoopDirector::BeginPlay()
 	AlteredPropCount = AlteredChairCount = AlteredTableCount = AlteredFrameCount = ReversedExitSignCount = 0;
 	NextHorrorEventAt = GetWorld()->GetTimeSeconds() + 100000.f;
 	EventBag.Reset();
+	SequentialLampOrder.Reset();
 	AlteredActorProps.Reset();
 	AlteredTableInstances.Reset();
 	HorrorRandom.Initialize(HorrorSeed != 0 ? HorrorSeed : static_cast<int32>(FPlatformTime::Cycles()));
@@ -189,7 +190,9 @@ float AShowcaseLoopDirector::GetHorrorEventDuration(EShowcaseHorrorEvent Event, 
 	if (SafeStage == 0 || Event == EShowcaseHorrorEvent::None) return 0.f;
 	switch (Event)
 	{
+	case EShowcaseHorrorEvent::SequentialBlackout:
 	case EShowcaseHorrorEvent::ForwardBlackout: return SafeStage == 1 ? 1.1f : SafeStage == 2 ? 1.9f : 3.f;
+	case EShowcaseHorrorEvent::SequentialRedPulse:
 	case EShowcaseHorrorEvent::RedPulse: return SafeStage == 1 ? .55f : SafeStage == 2 ? .75f : 1.f;
 	case EShowcaseHorrorEvent::FlickerOut: return SafeStage == 1 ? 1.8f : SafeStage == 2 ? 2.8f : 4.f;
 	case EShowcaseHorrorEvent::ChairReveal: return SafeStage == 1 ? 1.4f : SafeStage == 2 ? 2.2f : 3.2f;
@@ -203,6 +206,24 @@ bool AShowcaseLoopDirector::ShouldReverseExitSigns(int32 Stage, bool bDoorReveal
 	return Stage >= 3 && bDoorRevealed;
 }
 
+TArray<int32> AShowcaseLoopDirector::GetFarToNearLampOrder(const TArray<float>& ForwardDistances)
+{
+	TArray<int32> Order;
+	for (int32 Index = 0; Index < ForwardDistances.Num(); ++Index)
+		if (FMath::IsFinite(ForwardDistances[Index]) && ForwardDistances[Index] > 0.f) Order.Add(Index);
+	Order.Sort([&ForwardDistances](int32 Left, int32 Right)
+	{
+		return ForwardDistances[Left] == ForwardDistances[Right]
+			? Left < Right : ForwardDistances[Left] > ForwardDistances[Right];
+	});
+	return Order;
+}
+
+float AShowcaseLoopDirector::GetSequentialLampDelay(int32 OrderIndex)
+{
+	return FMath::Max(0, OrderIndex) * .2f;
+}
+
 void AShowcaseLoopDirector::RefillEventBag()
 {
 	EventBag = {
@@ -211,6 +232,8 @@ void AShowcaseLoopDirector::RefillEventBag()
 		EShowcaseHorrorEvent::FlickerOut,
 		EShowcaseHorrorEvent::ChairReveal,
 		EShowcaseHorrorEvent::PropDisplacement,
+		EShowcaseHorrorEvent::SequentialBlackout,
+		EShowcaseHorrorEvent::SequentialRedPulse,
 	};
 	for (int32 Index = EventBag.Num() - 1; Index > 0; --Index)
 	{
@@ -225,6 +248,19 @@ void AShowcaseLoopDirector::StartHorrorEvent()
 	CurrentHorrorEvent = EventBag.Pop(EAllowShrinking::No);
 	HorrorEventStartedAt = GetWorld()->GetTimeSeconds();
 	HorrorEventEndsAt = HorrorEventStartedAt + GetHorrorEventDuration(CurrentHorrorEvent, CurrentStage);
+	SequentialLampOrder.Reset();
+	if (CurrentHorrorEvent == EShowcaseHorrorEvent::SequentialBlackout || CurrentHorrorEvent == EShowcaseHorrorEvent::SequentialRedPulse)
+	{
+		TArray<float> ForwardDistances;
+		ForwardDistances.Init(-1.f, Lamps.Num());
+		for (int32 Index = 0; Index < Lamps.Num(); ++Index)
+			if (IsLampAhead(Index))
+				ForwardDistances[Index] = bStraightCorridor ? Lamps[Index]->GetActorLocation().X - PlayerPathPosition
+					: FVector::Dist2D(Lamps[Index]->GetActorLocation(), ViewPosition);
+		SequentialLampOrder = GetFarToNearLampOrder(ForwardDistances);
+		// Finish only after the closest selected lamp changes, then hold the effect.
+		HorrorEventEndsAt += GetSequentialLampDelay(SequentialLampOrder.Num() - 1);
+	}
 	FlickerEndsAt = HorrorEventStartedAt + (CurrentStage == 1 ? .8f : CurrentStage == 2 ? 1.15f : 1.45f);
 	bChairRevealPending = CurrentHorrorEvent == EShowcaseHorrorEvent::ChairReveal;
 	++HorrorEventSerial;
@@ -256,24 +292,34 @@ bool AShowcaseLoopDirector::IsLampAhead(int32 LampIndex) const
 	return FVector::DotProduct(ToLamp, ViewForward.GetSafeNormal2D()) > 0.f;
 }
 
+bool AShowcaseLoopDirector::IsLampReachedBySequence(int32 LampIndex, float Elapsed) const
+{
+	const int32 OrderIndex = SequentialLampOrder.IndexOfByKey(LampIndex);
+	return OrderIndex != INDEX_NONE && Elapsed + KINDA_SMALL_NUMBER >= GetSequentialLampDelay(OrderIndex);
+}
+
 void AShowcaseLoopDirector::ApplyHorrorLighting(float Now)
 {
 	const float Elapsed = Now - HorrorEventStartedAt;
+	const bool bSequential = CurrentHorrorEvent == EShowcaseHorrorEvent::SequentialBlackout
+		|| CurrentHorrorEvent == EShowcaseHorrorEvent::SequentialRedPulse;
 	for (FLightState& State : LightStates)
 	{
 		ULightComponent* Light = State.Light.Get();
 		if (!Light) continue;
 		float Multiplier = 1.f;
 		FLinearColor Color = State.Color;
-		if (IsLampAhead(State.LampIndex))
+		if (bSequential ? IsLampReachedBySequence(State.LampIndex, Elapsed) : IsLampAhead(State.LampIndex))
 		{
 			switch (CurrentHorrorEvent)
 			{
 			case EShowcaseHorrorEvent::ForwardBlackout:
 			case EShowcaseHorrorEvent::ChairReveal:
+			case EShowcaseHorrorEvent::SequentialBlackout:
 				Multiplier = 0.f;
 				break;
 			case EShowcaseHorrorEvent::RedPulse:
+			case EShowcaseHorrorEvent::SequentialRedPulse:
 				Multiplier = .72f;
 				Color = FLinearColor(1.f, .012f, .004f);
 				break;
@@ -299,9 +345,10 @@ void AShowcaseLoopDirector::ApplyHorrorLighting(float Now)
 		UMaterialInstanceDynamic* Material = Bulb.Material.Get();
 		if (!Material) continue;
 		float Multiplier = 1.f;
-		if (IsLampAhead(Bulb.LampIndex))
+		if (bSequential ? IsLampReachedBySequence(Bulb.LampIndex, Elapsed) : IsLampAhead(Bulb.LampIndex))
 		{
-			if (CurrentHorrorEvent == EShowcaseHorrorEvent::ForwardBlackout || CurrentHorrorEvent == EShowcaseHorrorEvent::ChairReveal)
+			if (CurrentHorrorEvent == EShowcaseHorrorEvent::ForwardBlackout || CurrentHorrorEvent == EShowcaseHorrorEvent::ChairReveal
+				|| CurrentHorrorEvent == EShowcaseHorrorEvent::SequentialBlackout)
 				Multiplier = 0.f;
 			else if (CurrentHorrorEvent == EShowcaseHorrorEvent::FlickerOut)
 			{

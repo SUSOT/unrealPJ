@@ -3,6 +3,31 @@
 #include "World/ShowcaseLoopDirector.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShowcaseSequentialLightsTest, "UnrealTeamPJ.Showcase.SequentialLights", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FShowcaseSequentialLightsTest::RunTest(const FString& Parameters)
+{
+	// New event values are appended so existing saved enum values stay intact.
+	TestEqual(TEXT("Sequential blackout holds after reaching the player-side lamp"),
+		AShowcaseLoopDirector::GetHorrorEventDuration(EShowcaseHorrorEvent::SequentialBlackout, 1), 1.1f);
+	TestEqual(TEXT("Sequential red lighting holds before restoring the original color"),
+		AShowcaseLoopDirector::GetHorrorEventDuration(EShowcaseHorrorEvent::SequentialRedPulse, 1), .55f);
+	const TArray<int32> Order = AShowcaseLoopDirector::GetFarToNearLampOrder({-1.f, 2400.f, 6000.f, 1200.f, 6000.f, 0.f});
+	TestEqual(TEXT("Only valid forward lamps enter the sequence"), Order.Num(), 4);
+	if (Order.Num() == 4)
+	{
+		TestEqual(TEXT("The farthest lamp changes first"), Order[0], 2);
+		TestEqual(TEXT("Equidistant lamps have stable ordering"), Order[1], 4);
+		TestEqual(TEXT("The next nearer lamp changes third"), Order[2], 1);
+		TestEqual(TEXT("The player-side lamp changes last"), Order[3], 3);
+	}
+	TestEqual(TEXT("The farthest lamp changes immediately"), AShowcaseLoopDirector::GetSequentialLampDelay(0), 0.f);
+	TestEqual(TEXT("The second lamp changes after 0.2 seconds"), AShowcaseLoopDirector::GetSequentialLampDelay(1), .2f);
+	TestEqual(TEXT("The third lamp changes after 0.4 seconds"), AShowcaseLoopDirector::GetSequentialLampDelay(2), .4f);
+	TestEqual(TEXT("The last of twelve lamps changes after 2.2 seconds"), AShowcaseLoopDirector::GetSequentialLampDelay(11), 2.2f);
+	TestEqual(TEXT("No lamps produces an empty wave"), AShowcaseLoopDirector::GetFarToNearLampOrder({}).Num(), 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShowcaseRandomVisualEventsTest, "UnrealTeamPJ.Showcase.RandomVisualEvents", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FShowcaseRandomVisualEventsTest::RunTest(const FString& Parameters)
 {

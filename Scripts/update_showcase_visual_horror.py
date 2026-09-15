@@ -150,7 +150,7 @@ out = Path(u.Paths.project_saved_dir()) / 'ShowcaseExpansion'
     'repeated_fixtures': len(fixtures),
     'fixed_hism_instances': extension.get_repeated_instance_count(),
     'base_light_scale': .72,
-    'random_event_types': 5,
+    'random_event_types': 7,
     'chairs': len(chairs),
     'frames': len(frames),
     'table_mesh': table_mesh.get_path_name(),

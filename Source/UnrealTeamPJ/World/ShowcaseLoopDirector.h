@@ -21,6 +21,8 @@ enum class EShowcaseHorrorEvent : uint8
 	FlickerOut,
 	ChairReveal,
 	PropDisplacement,
+	SequentialBlackout,
+	SequentialRedPulse,
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FShowcaseLoopEscaped);
@@ -80,6 +82,8 @@ public:
 	static int32 GetHorrorPropChangeCount(int32 Stage);
 	static float GetHorrorEventDuration(EShowcaseHorrorEvent Event, int32 Stage);
 	static bool ShouldReverseExitSigns(int32 Stage, bool bDoorRevealed);
+	static TArray<int32> GetFarToNearLampOrder(const TArray<float>& ForwardDistances);
+	static float GetSequentialLampDelay(int32 OrderIndex);
 
 protected:
 	virtual void BeginPlay() override;
@@ -102,6 +106,8 @@ private:
 	TArray<FLightState> LightStates;
 	TArray<FBulbState> BulbStates;
 	TArray<EShowcaseHorrorEvent> EventBag;
+	/** Snapshot of lamp indices, farthest first, fixed for the current wave. */
+	TArray<int32> SequentialLampOrder;
 	TSet<TWeakObjectPtr<AActor>> AlteredActorProps;
 	TSet<uint64> AlteredTableInstances;
 	FShowcaseEscapeProgress Progress;
@@ -125,6 +131,7 @@ private:
 
 	bool IsUnseen(const FVector& Point, float Margin = 100.f) const;
 	bool IsLampAhead(int32 LampIndex) const;
+	bool IsLampReachedBySequence(int32 LampIndex, float Elapsed) const;
 	void UpdateHorrorEvents();
 	void StartHorrorEvent();
 	void FinishHorrorEvent();

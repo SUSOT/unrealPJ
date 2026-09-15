@@ -88,6 +88,7 @@ def scenario():
     check(extension.get_repeated_instance_count() == 4008 and len(extension.get_editor_property('repeated_fixtures')) == 104, 'Infinite corridor instance and fixture budgets remain unchanged')
 
     observed = {'red': False, 'blackout': False, 'flicker': False}
+    waves = {}
 
     def observe_event():
         current = str(director.get_editor_property('current_horror_event')).lower()
@@ -105,20 +106,46 @@ def scenario():
             observed['blackout'] |= bool(intensities) and all(value < 1 for value in intensities)
         if 'flicker_out' in current:
             observed['flicker'] |= bool(intensities) and any(value < 1 for value in intensities)
+        if 'sequential_' in current:
+            serial = director.get_editor_property('horror_event_serial')
+            wave = waves.setdefault(serial, {
+                'type': 'blackout' if 'blackout' in current else 'red',
+                'order': [lamp.get_actor_label() for lamp in sorted(
+                    (lamp for lamp in lamps if 120 < lamp.get_actor_location().x - x[0] < 14400),
+                    key=lambda lamp: lamp.get_actor_location().x, reverse=True)],
+                'changes': {},
+            })
+            now = u.GameplayStatics.get_time_seconds(world)
+            for lamp in lamps:
+                label = lamp.get_actor_label()
+                if label not in wave['order'] or label in wave['changes']:
+                    continue
+                components = lamp.get_components_by_class(u.LightComponent)
+                changed = bool(components) and (
+                    all(c.get_editor_property('intensity') < 1 for c in components)
+                    if wave['type'] == 'blackout' else
+                    all(c.get_editor_property('light_color').r > c.get_editor_property('light_color').g * 4
+                        and c.get_editor_property('light_color').r > c.get_editor_property('light_color').b * 4 for c in components))
+                if changed:
+                    wave['changes'][label] = now
 
     yield from walk(4050, observer=observe_event)
-    yield .5
+    for _ in range(10):
+        observe_event()
+        yield .05
     check(director.get_editor_property('current_stage') == 2, 'Mid-route progress reaches the stronger random-event tier')
     check(all(a.get_actor_scale3d().x > 0 for a in signs), 'Signs do not reverse before the escape threshold')
 
     yield from walk(6300, observer=observe_event)
-    yield 1
+    for _ in range(20):
+        observe_event()
+        yield .05
     door = director.get_editor_property('escape_door')
     check(director.get_editor_property('current_stage') == 3 and door.get_editor_property('revealed'), 'The turn-back escape is prepared at the final threshold')
     check(director.get_editor_property('reversed_exit_sign_count') == 8 and all(a.get_actor_scale3d().x < 0 for a in signs), 'All emergency pictograms reverse when the turn-back exit appears')
 
-    required_mask = sum(1 << value for value in range(1, 6))
-    deadline = time.monotonic() + 65
+    required_mask = sum(1 << value for value in range(1, 8))
+    deadline = time.monotonic() + 95
     while time.monotonic() < deadline:
         observe_event()
         history = director.get_editor_property('horror_event_history_mask')
@@ -130,13 +157,24 @@ def scenario():
             break
         yield .05
 
-    check(director.get_editor_property('horror_event_history_mask') & required_mask == required_mask, 'A shuffled event bag produces all five requested event types')
+    report['sequential_waves'] = list(waves.values())
+    check(director.get_editor_property('horror_event_history_mask') & required_mask == required_mask, 'A shuffled event bag produces all seven requested event types')
+    for kind in ('blackout', 'red'):
+        valid = False
+        for wave in waves.values():
+            if wave['type'] != kind or len(wave['changes']) != len(wave['order']) or len(wave['order']) < 2:
+                continue
+            order = list(wave['changes'])
+            times = list(wave['changes'].values())
+            intervals = [later - earlier for earlier, later in zip(times, times[1:])]
+            valid |= order == wave['order'] and all(abs(interval - .2) < .085 for interval in intervals)
+        check(valid, 'Sequential ' + kind + ' reaches all forward lamps far-to-near at 0.2-second intervals')
     check(observed['red'], 'The red-light event switches every forward lamp to abrupt red')
     check(observed['blackout'], 'Blackout events switch every forward lamp fully off')
     check(observed['flicker'], 'The rapid-flicker event contains hard off frames before its outage')
     check(director.get_editor_property('altered_chair_count') > 0, 'A chair is found fallen when blackout lighting returns')
     check(director.get_editor_property('altered_table_count') > 0 and director.get_editor_property('altered_frame_count') > 0, 'Random prop events move both tables and wall frames from their original positions')
-    check(director.get_editor_property('completed_horror_events') >= 5, 'All requested events finish and restore normal lighting')
+    check(director.get_editor_property('completed_horror_events') >= 7, 'All requested events finish and restore normal lighting')
     check(len(actors) < 150, 'The replacement horror pass stays under 150 level actors in PIE')
     report.update(
         passed=True,
@@ -166,7 +204,7 @@ def tick(_delta):
         return
     state['busy'] = True
     try:
-        assert time.monotonic() - state['start'] < 100, 'Random event validation timeout'
+        assert time.monotonic() - state['start'] < 140, 'Random event validation timeout'
         state['next'] = time.monotonic() + next(run)
     except StopIteration:
         finish()
