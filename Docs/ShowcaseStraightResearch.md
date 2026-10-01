@@ -71,6 +71,17 @@ Door Distance Ahead는 550cm. Straight Corridor가 직선 동작을 활성화한
 - 이번 무작위 이벤트 교체 직전 맵 백업은
   `Saved/ShowcaseExpansion/Backup/RandomVisualEvents_20260909/`에 있다.
 
+## 진행 거리 연장 (2026-09-30)
+
+- 현재 Showcase1 인스턴스의 단계 전환 거리는 36m / 76m / 120m이다.
+  기존 18m / 38m / 60m의 두 배이며, 마지막 단계에서 뒤쪽 탈출구와 비상구 방향 전환이 활성화된다.
+- 연출 자체의 빈도, 강도, 순차 조명의 0.2초 간격은 그대로 유지한다.
+- TestLevel에는 `TestLevel_FallRestart`를 배치했다. 플레이어 또는 레그돌 몸이
+  월드 Z=-1500cm 아래에 도달하면 현재 레벨을 다시 불러와 시작 상태로 돌아간다.
+  이 액터가 없는 다른 맵의 낙하 동작은 바뀌지 않는다.
+- 적용 스크립트는 `Scripts/apply_longer_pacing_and_fall_restart.py`이며
+  수정 직전 맵을 `Saved/PacingFallBackup/`에 백업한다.
+
 ## 먼 전등부터 다가오는 순차 조명 (2026-09-14)
 
 - 기존 다섯 연출을 유지한 채 `SequentialBlackout`과 `SequentialRedPulse`를

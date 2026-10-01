@@ -129,14 +129,14 @@ def scenario():
                 if changed:
                     wave['changes'][label] = now
 
-    yield from walk(4050, observer=observe_event)
+    yield from walk(250 + director.get_editor_property('second_change_distance'), observer=observe_event)
     for _ in range(10):
         observe_event()
         yield .05
     check(director.get_editor_property('current_stage') == 2, 'Mid-route progress reaches the stronger random-event tier')
     check(all(a.get_actor_scale3d().x > 0 for a in signs), 'Signs do not reverse before the escape threshold')
 
-    yield from walk(6300, observer=observe_event)
+    yield from walk(300 + director.get_editor_property('turn_back_unlock_distance'), observer=observe_event)
     for _ in range(20):
         observe_event()
         yield .05
@@ -204,7 +204,7 @@ def tick(_delta):
         return
     state['busy'] = True
     try:
-        assert time.monotonic() - state['start'] < 140, 'Random event validation timeout'
+        assert time.monotonic() - state['start'] < 200, 'Random event validation timeout'
         state['next'] = time.monotonic() + next(run)
     except StopIteration:
         finish()
