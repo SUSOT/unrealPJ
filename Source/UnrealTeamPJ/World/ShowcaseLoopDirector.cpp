@@ -80,7 +80,7 @@ void AShowcaseLoopDirector::BeginPlay()
 		}
 	}
 
-	if (EscapeDoor && EscapeDoor->Destination)
+	if (EscapeDoor && (EscapeDoor->Destination || !EscapeDoor->DestinationLevel.IsNull()))
 	{
 		EscapeDoor->OnEscaped.AddDynamic(this, &AShowcaseLoopDirector::HandleEscaped);
 	}

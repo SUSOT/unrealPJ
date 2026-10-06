@@ -82,7 +82,7 @@ void AShowcaseEscapeDoor::BeginPlay()
 
 void AShowcaseEscapeDoor::RevealAt(const FTransform& Transform)
 {
-	if (bRevealed || !IsValid(Destination)) return;
+	if (bRevealed || (DestinationLevel.IsNull() && !IsValid(Destination))) return;
 	SetActorTransform(Transform, false, nullptr, ETeleportType::TeleportPhysics);
 	bRevealed = true;
 	bHasPreviousSample = false;
@@ -125,6 +125,14 @@ void AShowcaseEscapeDoor::CompleteTravel()
 	APawn* Pawn = EscapingPawn.Get();
 	bTravelPending = false;
 	if (!Pawn) return;
+	if (!DestinationLevel.IsNull())
+	{
+		bEscaped = true;
+		SetActorTickEnabled(false);
+		OnEscaped.Broadcast();
+		UGameplayStatics::OpenLevelBySoftObjectPtr(this, DestinationLevel);
+		return;
+	}
 	const bool bArrived = IsValid(Destination) && Pawn->TeleportTo(Destination->GetActorLocation(), Destination->GetActorRotation());
 	if (APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
 	{

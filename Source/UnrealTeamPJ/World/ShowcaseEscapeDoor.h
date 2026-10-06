@@ -24,6 +24,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Escape Door")
 	TObjectPtr<AActor> Destination;
+	/** If assigned, crossing the door loads this map instead of teleporting locally. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Escape Door")
+	TSoftObjectPtr<UWorld> DestinationLevel;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Escape Door")
 	TObjectPtr<UMaterialInterface> FrameMaterial;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Escape Door")
